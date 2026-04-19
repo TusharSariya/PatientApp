@@ -1,20 +1,41 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+
+import HomeScreen from './src/HomeScreen';
+import AddPatientScreen from './src/AddPatientScreen';
+import SearchScreen from './src/SearchScreen';
+
+const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <NavigationContainer>
+      <StatusBar style="dark" />
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: { backgroundColor: '#fff' },
+          headerTitleStyle: { fontWeight: '700', color: '#1a1a2e' },
+          headerTintColor: '#4f6ef7',
+        }}
+      >
+        <Stack.Screen
+          name="Home"
+          component={HomeScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AddPatient"
+          component={AddPatientScreen}
+          options={{ title: 'New Patient' }}
+        />
+        <Stack.Screen
+          name="Search"
+          component={SearchScreen}
+          options={{ title: 'Search Patients' }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
