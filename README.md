@@ -41,7 +41,7 @@ A React Native app (Expo) for managing patient records on-device. Stores name, p
 4. **Clone and install**
    ```bash
    git clone <your-repo-url>
-   cd LineshApp
+   cd PatientApp
    npm install
    ```
 
@@ -187,7 +187,7 @@ No simulator or emulator needed. Runs on your real phone.
 ## Project Structure
 
 ```
-LineshApp/
+PatientApp/
 ├── App.js                  # Root component, navigation setup
 ├── src/
 │   ├── HomeScreen.js       # Landing page with navigation cards
