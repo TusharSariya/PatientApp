@@ -16,10 +16,9 @@ const ALICE_MEDICINES = [
 
 export async function getDb() {
   if (!db) {
-    if (__DEV__) {
-      try { await SQLite.deleteDatabaseAsync('patients.db'); } catch {}
-    }
+    console.log('[db] getDb: initializing, __DEV__=', __DEV__);
     db = await SQLite.openDatabaseAsync('patients.db');
+    console.log('[db] opened');
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,22 +36,32 @@ export async function getDb() {
         route TEXT,
         instructions TEXT
       );
+      CREATE TABLE IF NOT EXISTS gestures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        word TEXT NOT NULL,
+        data TEXT NOT NULL
+      );
     `);
 
     if (__DEV__) {
-      let aliceId;
-      for (const p of MOCK_PATIENTS) {
-        const result = await db.runAsync(
-          'INSERT INTO patients (name, phone, address) VALUES (?, ?, ?)',
-          [p.name, p.phone, p.address]
-        );
-        if (p.name === 'Alice Johnson') aliceId = result.lastInsertRowId;
-      }
-      for (const m of ALICE_MEDICINES) {
-        await db.runAsync(
-          'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [aliceId, m.name, m.dosage, m.frequency, m.duration, m.route, m.instructions]
-        );
+      const row = await db.getFirstAsync('SELECT COUNT(*) AS count FROM patients');
+      const patientCount = row?.count ?? 0;
+
+      if (patientCount === 0) {
+        let aliceId;
+        for (const p of MOCK_PATIENTS) {
+          const result = await db.runAsync(
+            'INSERT INTO patients (name, phone, address) VALUES (?, ?, ?)',
+            [p.name, p.phone, p.address]
+          );
+          if (p.name === 'Alice Johnson') aliceId = result.lastInsertRowId;
+        }
+        for (const m of ALICE_MEDICINES) {
+          await db.runAsync(
+            'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [aliceId, m.name, m.dosage, m.frequency, m.duration, m.route, m.instructions]
+          );
+        }
       }
     }
   }
@@ -101,4 +110,29 @@ export async function addMedicine(patientId, { name, dosage, frequency, duration
 export async function deleteMedicine(id) {
   const database = await getDb();
   await database.runAsync('DELETE FROM medicines WHERE id = ?', [id]);
+}
+
+export async function getGestures() {
+  console.log('[db] getGestures: getting db');
+  const database = await getDb();
+  console.log('[db] getGestures: querying');
+  const rows = await database.getAllAsync('SELECT * FROM gestures ORDER BY id ASC');
+  console.log('[db] getGestures: got', rows.length, 'rows');
+  return rows;
+}
+
+export async function addGesture(word, data) {
+  console.log('[db] addGesture word=', word, 'dataBytes=', data?.length);
+  const database = await getDb();
+  const result = await database.runAsync(
+    'INSERT INTO gestures (word, data) VALUES (?, ?)',
+    [word, data]
+  );
+  console.log('[db] addGesture inserted id=', result.lastInsertRowId, 'changes=', result.changes);
+  return result.lastInsertRowId;
+}
+
+export async function deleteGesture(id) {
+  const database = await getDb();
+  await database.runAsync('DELETE FROM gestures WHERE id = ?', [id]);
 }

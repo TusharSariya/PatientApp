@@ -24,6 +24,15 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.cardTitle}>Search Patients</Text>
         <Text style={styles.cardDesc}>Look up a patient by name</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('Settings')}
+      >
+        <Text style={styles.cardIcon}>⚙️</Text>
+        <Text style={styles.cardTitle}>Settings</Text>
+        <Text style={styles.cardDesc}>Manage gestures and preferences</Text>
+      </TouchableOpacity>
     </View>
   );
 }

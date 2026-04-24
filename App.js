@@ -7,6 +7,8 @@ import HomeScreen from './src/HomeScreen';
 import AddPatientScreen from './src/AddPatientScreen';
 import SearchScreen from './src/SearchScreen';
 import PatientDetailScreen from './src/PatientDetailScreen';
+import SettingsScreen from './src/SettingsScreen';
+import ManageGesturesScreen from './src/ManageGesturesScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -40,6 +42,16 @@ export default function App() {
           name="PatientDetail"
           component={PatientDetailScreen}
           options={({ route }) => ({ title: route.params.patient.name })}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ title: 'Settings' }}
+        />
+        <Stack.Screen
+          name="ManageGestures"
+          component={ManageGesturesScreen}
+          options={{ title: 'Manage Gestures' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
