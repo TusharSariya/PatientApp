@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import {
   ExpoSpeechRecognitionModule,
@@ -93,11 +96,76 @@ function PersonalTab({ patient }) {
   );
 }
 
-function RxTab() {
+function Field({ label, value, onChange, multiline }) {
   return (
-    <View style={styles.tabContent}>
-      <Text style={styles.empty}>No prescriptions yet.</Text>
+    <View style={styles.fieldGroup}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
+        value={value}
+        onChangeText={onChange}
+        multiline={multiline}
+        numberOfLines={multiline ? 3 : 1}
+        textAlignVertical={multiline ? 'top' : 'center'}
+        placeholderTextColor="#bbb"
+        placeholder="—"
+      />
     </View>
+  );
+}
+
+function RxTab() {
+  const [complaints, setComplaints] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [investigations, setInvestigations] = useState('');
+  const [procedures, setProcedures] = useState('');
+  const [findings, setFindings] = useState('');
+  const [bp, setBp] = useState('');
+  const [weight, setWeight] = useState('');
+  const [weightUnit, setWeightUnit] = useState('kg');
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
+        <Field label="Complaints" value={complaints} onChange={setComplaints} multiline />
+        <Field label="Diagnosis" value={diagnosis} onChange={setDiagnosis} multiline />
+        <Field label="Investigations" value={investigations} onChange={setInvestigations} multiline />
+        <Field label="Procedures" value={procedures} onChange={setProcedures} multiline />
+        <Field label="Findings" value={findings} onChange={setFindings} multiline />
+
+        <Field label="Blood Pressure (mmHg)" value={bp} onChange={setBp} />
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Weight</Text>
+          <View style={styles.weightRow}>
+            <TextInput
+              style={[styles.fieldInput, styles.weightInput]}
+              value={weight}
+              onChangeText={setWeight}
+              keyboardType="decimal-pad"
+              placeholder="—"
+              placeholderTextColor="#bbb"
+            />
+            <View style={styles.unitToggle}>
+              {['kg', 'lbs'].map((unit) => (
+                <TouchableOpacity
+                  key={unit}
+                  style={[styles.unitBtn, weightUnit === unit && styles.unitBtnActive]}
+                  onPress={() => setWeightUnit(unit)}
+                >
+                  <Text style={[styles.unitBtnText, weightUnit === unit && styles.unitBtnTextActive]}>
+                    {unit}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -234,5 +302,61 @@ const styles = StyleSheet.create({
     marginTop: 60,
     color: '#999',
     fontSize: 16,
+  },
+  fieldGroup: {
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  fieldInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1a1a2e',
+  },
+  fieldInputMultiline: {
+    height: 88,
+    textAlignVertical: 'top',
+  },
+  weightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  weightInput: {
+    flex: 1,
+  },
+  unitToggle: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  unitBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  unitBtnActive: {
+    backgroundColor: '#4f6ef7',
+  },
+  unitBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#999',
+  },
+  unitBtnTextActive: {
+    color: '#fff',
   },
 });
