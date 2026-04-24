@@ -13,7 +13,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { getGestures, addGesture, deleteGesture } from './database';
-import { recordGesture, matchGesture } from './gestureRecognizer';
+import { recordGesture } from './gestureRecognizer';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -240,62 +240,10 @@ function AddSheet({ onSaved, onBusyChange }) {
   );
 }
 
-// ---- TestSheet ----
-function TestSheet({ gestures }) {
-  const [data, setData] = useState(null);
-  const [result, setResult] = useState(null); // undefined = not run yet, null = no match, obj = match
-  const [widgetKey, setWidgetKey] = useState(0);
-
-  function handleRecorded(d) {
-    setData(d);
-    const match = matchGesture(d, gestures);
-    setResult(match ?? null);
-  }
-
-  function reset() {
-    setData(null);
-    setResult(null);
-    setWidgetKey(k => k + 1);
-  }
-
-  return (
-    <ScrollView showsVerticalScrollIndicator={false}>
-      <Text style={styles.hint}>
-        {gestures.length === 0
-          ? 'No gestures saved yet. Add one first.'
-          : `Testing against ${gestures.length} saved gesture${gestures.length !== 1 ? 's' : ''}`}
-      </Text>
-
-      <RecordWidget key={widgetKey} onDone={handleRecorded} />
-
-      {data && (
-        result ? (
-          <View style={styles.resultMatch}>
-            <Text style={styles.resultLabel}>Detected</Text>
-            <Text style={styles.resultWord}>{result.word.toUpperCase()}</Text>
-          </View>
-        ) : (
-          <View style={styles.resultNone}>
-            <Text style={styles.resultNoneText}>✗ No match</Text>
-            <Text style={styles.resultNoneSub}>Try a clearer gesture, or lower the threshold</Text>
-          </View>
-        )
-      )}
-
-      {data && (
-        <TouchableOpacity onPress={reset}>
-          <Text style={styles.reRecordLink}>Try Again</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
-  );
-}
-
 // ---- Main Screen ----
 export default function ManageGesturesScreen({ navigation }) {
   const [gestures, setGestures] = useState([]);
   const [addVisible, setAddVisible] = useState(false);
-  const [testVisible, setTestVisible] = useState(false);
   const [addSheetBusy, setAddSheetBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -336,7 +284,11 @@ export default function ManageGesturesScreen({ navigation }) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         {/* Test card */}
-        <TouchableOpacity style={styles.testCard} onPress={() => setTestVisible(true)} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.testCard}
+          onPress={() => navigation.navigate('TestGesture')}
+          activeOpacity={0.8}
+        >
           <Text style={styles.testCardIcon}>🎯</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.testCardTitle}>Test a Gesture</Text>
@@ -379,15 +331,6 @@ export default function ManageGesturesScreen({ navigation }) {
           onSaved={() => { setAddSheetBusy(false); setAddVisible(false); load(); }}
           onBusyChange={setAddSheetBusy}
         />
-      </BottomSheet>
-
-      {/* Test sheet */}
-      <BottomSheet
-        visible={testVisible}
-        onClose={() => setTestVisible(false)}
-        title="Test Gesture"
-      >
-        <TestSheet gestures={gestures} />
       </BottomSheet>
     </View>
   );
@@ -478,24 +421,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#c5cdf5',
   },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-
-  // Test results
-  resultMatch: {
-    alignItems: 'center',
-    backgroundColor: '#eafaf1',
-    borderRadius: 14,
-    paddingVertical: 20,
-    marginTop: 16,
-  },
-  resultLabel: { fontSize: 13, color: '#27ae60', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  resultWord: { fontSize: 36, fontWeight: '800', color: '#1a1a2e', marginTop: 6 },
-  resultNone: {
-    alignItems: 'center',
-    backgroundColor: '#fef9f0',
-    borderRadius: 14,
-    paddingVertical: 20,
-    marginTop: 16,
-  },
-  resultNoneText: { fontSize: 18, fontWeight: '700', color: '#e67e22' },
-  resultNoneSub: { fontSize: 13, color: '#999', marginTop: 6, textAlign: 'center' },
 });

@@ -9,6 +9,7 @@ import SearchScreen from './src/SearchScreen';
 import PatientDetailScreen from './src/PatientDetailScreen';
 import SettingsScreen from './src/SettingsScreen';
 import ManageGesturesScreen from './src/ManageGesturesScreen';
+import TestGestureScreen from './src/TestGestureScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -52,6 +53,11 @@ export default function App() {
           name="ManageGestures"
           component={ManageGesturesScreen}
           options={{ title: 'Manage Gestures' }}
+        />
+        <Stack.Screen
+          name="TestGesture"
+          component={TestGestureScreen}
+          options={{ title: 'Test Gesture' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
