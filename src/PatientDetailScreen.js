@@ -12,11 +12,93 @@ import {
   Alert,
   Keyboard,
   Animated,
+  Modal,
 } from 'react-native';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
+import { getMedicines, addMedicine, deleteMedicine } from './database';
+
+const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
+
+const EMPTY_FORM = { name: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' };
+
+function BottomSheet({ visible, onClose, title, children }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={sheet.overlay}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={sheet.container}>
+          <View style={sheet.handle} />
+          {title ? <Text style={sheet.title}>{title}</Text> : null}
+          {children}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const sheet = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  container: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '88%',
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#ddd',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: 20,
+  },
+});
+
+function MedicineCard({ medicine, onPress }) {
+  const sub = [medicine.dosage, medicine.frequency].filter(Boolean).join(' · ');
+  return (
+    <TouchableOpacity style={medCard.card} onPress={onPress} activeOpacity={0.75}>
+      <View style={{ flex: 1 }}>
+        <Text style={medCard.name}>{medicine.name}</Text>
+        {sub ? <Text style={medCard.sub}>{sub}</Text> : null}
+      </View>
+      <Text style={medCard.chevron}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+const medCard = StyleSheet.create({
+  card: {
+    backgroundColor: '#f8f9ff',
+    borderWidth: 1,
+    borderColor: '#e0e4ff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  name: { fontSize: 16, fontWeight: '600', color: '#1a1a2e' },
+  sub: { fontSize: 13, color: '#666', marginTop: 3 },
+  chevron: { fontSize: 22, color: '#bbb', marginLeft: 8 },
+});
 
 function TabBar({ active, onChange }) {
   const tabs = ['Personal', 'Rx'];
@@ -73,6 +155,13 @@ export default function PatientDetailScreen({ route }) {
   const [weight, setWeight] = useState('');
   const [weightUnit, setWeightUnit] = useState('kg');
 
+  // Medicines
+  const [medicines, setMedicines] = useState([]);
+  const [detailSheet, setDetailSheet] = useState({ visible: false, med: null });
+  const [addSheetVisible, setAddSheetVisible] = useState(false);
+  const [medForm, setMedForm] = useState(EMPTY_FORM);
+  const [addLoading, setAddLoading] = useState(false);
+
   // Refs
   const notesRef = useRef(null);
   const complaintsRef = useRef(null);
@@ -106,6 +195,10 @@ export default function PatientDetailScreen({ route }) {
     );
     return () => { show.remove(); hide.remove(); };
   }, []);
+
+  useEffect(() => {
+    getMedicines(patient.id).then(setMedicines).catch(() => {});
+  }, [patient.id]);
 
   const personalFields = [
     { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true },
@@ -148,7 +241,6 @@ export default function PatientDetailScreen({ route }) {
     setActiveTab(tab);
   }
 
-  // Tap: start dictation, or stop + next field if already dictating
   async function handlePress() {
     if (recognizing) {
       shouldAdvanceRef.current = true;
@@ -163,11 +255,49 @@ export default function PatientDetailScreen({ route }) {
     ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true });
   }
 
-  // Hold: stop dictation without advancing
   function handleLongPress() {
-    if (recognizing) {
-      ExpoSpeechRecognitionModule.stop();
+    if (recognizing) ExpoSpeechRecognitionModule.stop();
+  }
+
+  async function handleAddMedicine() {
+    if (!medForm.name.trim()) {
+      Alert.alert('Required', 'Medicine name is required.');
+      return;
     }
+    setAddLoading(true);
+    try {
+      const fields = {
+        name: medForm.name.trim(),
+        dosage: medForm.dosage.trim(),
+        frequency: medForm.frequency.trim(),
+        duration: medForm.duration.trim(),
+        route: medForm.route,
+        instructions: medForm.instructions.trim(),
+      };
+      const id = await addMedicine(patient.id, fields);
+      setMedicines(prev => [...prev, { id, patient_id: patient.id, ...fields }]);
+      setAddSheetVisible(false);
+      setMedForm(EMPTY_FORM);
+    } catch {
+      Alert.alert('Error', 'Failed to save medicine.');
+    } finally {
+      setAddLoading(false);
+    }
+  }
+
+  function handleDeleteMedicine(id) {
+    Alert.alert('Delete Medicine', 'Remove this medicine?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteMedicine(id);
+          setMedicines(prev => prev.filter(m => m.id !== id));
+          setDetailSheet({ visible: false, med: null });
+        },
+      },
+    ]);
   }
 
   return (
@@ -196,6 +326,27 @@ export default function PatientDetailScreen({ route }) {
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
+            {/* Medicines */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Medicines</Text>
+              <TouchableOpacity style={styles.addMedBtn} onPress={() => setAddSheetVisible(true)}>
+                <Text style={styles.addMedBtnText}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
+            {medicines.length === 0 ? (
+              <Text style={styles.noMeds}>No medicines added yet.</Text>
+            ) : (
+              medicines.map(med => (
+                <MedicineCard
+                  key={med.id}
+                  medicine={med}
+                  onPress={() => setDetailSheet({ visible: true, med })}
+                />
+              ))
+            )}
+
+            <View style={styles.divider} />
+
             {rxFields.map((f, i) =>
               f.label === 'Weight' ? (
                 <View key={f.label} style={styles.fieldGroup}>
@@ -239,6 +390,7 @@ export default function PatientDetailScreen({ route }) {
                 />
               )
             )}
+
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -253,6 +405,117 @@ export default function PatientDetailScreen({ route }) {
           <Text style={styles.fabIcon}>{recognizing ? '⏹' : '🎙'}</Text>
         </Pressable>
       </Animated.View>
+
+      {/* Medicine detail sheet */}
+      <BottomSheet
+        visible={detailSheet.visible}
+        onClose={() => setDetailSheet({ visible: false, med: null })}
+        title={detailSheet.med?.name}
+      >
+        {detailSheet.med && (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {[
+              { label: 'Dosage',       value: detailSheet.med.dosage },
+              { label: 'Frequency',    value: detailSheet.med.frequency },
+              { label: 'Duration',     value: detailSheet.med.duration },
+              { label: 'Route',        value: detailSheet.med.route },
+              { label: 'Instructions', value: detailSheet.med.instructions },
+            ].map(({ label, value }) =>
+              value ? (
+                <View key={label} style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{label}</Text>
+                  <Text style={styles.detailValue}>{value}</Text>
+                </View>
+              ) : null
+            )}
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => handleDeleteMedicine(detailSheet.med.id)}
+            >
+              <Text style={styles.deleteBtnText}>Delete Medicine</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
+      </BottomSheet>
+
+      {/* Add medicine sheet */}
+      <BottomSheet
+        visible={addSheetVisible}
+        onClose={() => { setAddSheetVisible(false); setMedForm(EMPTY_FORM); }}
+        title="Add Medicine"
+      >
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <Text style={styles.fieldLabel}>Name *</Text>
+          <TextInput
+            style={[styles.fieldInput, { marginBottom: 16 }]}
+            value={medForm.name}
+            onChangeText={v => setMedForm(f => ({ ...f, name: v }))}
+            placeholder="e.g. Amoxicillin"
+            placeholderTextColor="#bbb"
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.fieldLabel}>Dosage</Text>
+          <TextInput
+            style={[styles.fieldInput, { marginBottom: 16 }]}
+            value={medForm.dosage}
+            onChangeText={v => setMedForm(f => ({ ...f, dosage: v }))}
+            placeholder="e.g. 500mg"
+            placeholderTextColor="#bbb"
+          />
+
+          <Text style={styles.fieldLabel}>Frequency</Text>
+          <TextInput
+            style={[styles.fieldInput, { marginBottom: 16 }]}
+            value={medForm.frequency}
+            onChangeText={v => setMedForm(f => ({ ...f, frequency: v }))}
+            placeholder="e.g. Twice daily"
+            placeholderTextColor="#bbb"
+          />
+
+          <Text style={styles.fieldLabel}>Duration</Text>
+          <TextInput
+            style={[styles.fieldInput, { marginBottom: 16 }]}
+            value={medForm.duration}
+            onChangeText={v => setMedForm(f => ({ ...f, duration: v }))}
+            placeholder="e.g. 7 days"
+            placeholderTextColor="#bbb"
+          />
+
+          <Text style={styles.fieldLabel}>Route</Text>
+          <View style={styles.routeRow}>
+            {ROUTES.map(r => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.routeChip, medForm.route === r && styles.routeChipActive]}
+                onPress={() => setMedForm(f => ({ ...f, route: r }))}
+              >
+                <Text style={[styles.routeChipText, medForm.route === r && styles.routeChipTextActive]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>Instructions</Text>
+          <TextInput
+            style={[styles.fieldInput, styles.fieldInputMultiline, { marginBottom: 24 }]}
+            value={medForm.instructions}
+            onChangeText={v => setMedForm(f => ({ ...f, instructions: v }))}
+            placeholder="e.g. Take after meals"
+            placeholderTextColor="#bbb"
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+
+          <TouchableOpacity
+            style={[styles.saveBtn, addLoading && { opacity: 0.6 }]}
+            onPress={handleAddMedicine}
+            disabled={addLoading}
+          >
+            <Text style={styles.saveBtnText}>{addLoading ? 'Saving…' : 'Save Medicine'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </BottomSheet>
     </View>
   );
 }
@@ -369,6 +632,111 @@ const styles = StyleSheet.create({
   unitBtnTextActive: {
     color: '#fff',
   },
+  divider: {
+    height: 1,
+    backgroundColor: '#e8e8e8',
+    marginVertical: 24,
+  },
+  // Medicines section
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+  addMedBtn: {
+    backgroundColor: '#4f6ef7',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  addMedBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noMeds: {
+    color: '#aaa',
+    fontSize: 14,
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  // Detail sheet
+  detailRow: {
+    marginBottom: 20,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#1a1a2e',
+  },
+  deleteBtn: {
+    borderWidth: 1,
+    borderColor: '#e74c3c',
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  deleteBtnText: {
+    color: '#e74c3c',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  // Add medicine form
+  routeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  routeChip: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#fff',
+  },
+  routeChipActive: {
+    backgroundColor: '#4f6ef7',
+    borderColor: '#4f6ef7',
+  },
+  routeChipText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  routeChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  saveBtn: {
+    backgroundColor: '#4f6ef7',
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // FAB
   fab: {
     position: 'absolute',
     right: 24,

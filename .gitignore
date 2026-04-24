@@ -26,6 +26,9 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# APK builds (uploaded to GitHub releases, not committed)
+*.apk
+
 # macOS
 .DS_Store
 *.pem

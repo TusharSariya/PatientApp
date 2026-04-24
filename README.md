@@ -15,8 +15,9 @@ A React Native app (Expo) for managing patient records on-device. Stores name, p
    - [Option A: Expo Go (quickest)](#option-a-expo-go-quickest)
    - [Option B: iOS Simulator (macOS only)](#option-b-ios-simulator-macos-only)
    - [Option C: Android Emulator](#option-c-android-emulator)
-3. [Project Structure](#project-structure)
-4. [Troubleshooting](#troubleshooting)
+3. [Building & Releasing an APK](#building--releasing-an-apk)
+4. [Project Structure](#project-structure)
+5. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -184,18 +185,77 @@ No simulator or emulator needed. Runs on your real phone.
 
 ---
 
+## Building & Releasing an APK
+
+Use `release.sh` to build, version-bump, and publish an APK to GitHub Releases in one command. It auto-increments the version on every run.
+
+### Prerequisites
+
+1. **EAS CLI**
+   ```bash
+   npm install -g eas-cli
+   ```
+2. **Expo account** — [expo.dev](https://expo.dev) (free), then log in:
+   ```bash
+   eas login
+   ```
+3. **GitHub CLI** — [cli.github.com](https://cli.github.com), then log in:
+   ```bash
+   gh auth login
+   ```
+
+### Usage
+
+```bash
+./release.sh --title "Release title" --note "What changed"
+```
+
+| Flag | Description |
+|------|-------------|
+| `-t`, `--title` | Release title shown on GitHub **(required)** |
+| `-n`, `--note` | Release notes / changelog (optional) |
+| `--cloud` | Build on EAS servers and download the APK **(default)** |
+| `--local` | Build on this machine — requires Android SDK and Gradle |
+
+### Examples
+
+```bash
+# Cloud build (no Android SDK needed)
+./release.sh --title "v1.1 — Medicine list" --note "Added medicines to Rx tab"
+
+# Local build (faster if Android SDK is set up)
+./release.sh --title "Hotfix" --note "Fixed crash on empty Rx tab" --local
+```
+
+### What the script does
+
+1. Increments the patch version in `app.json` (`1.0.0` → `1.0.1`) and bumps `versionCode`
+2. Commits and pushes the version bump
+3. Builds the APK (cloud or local)
+4. Creates a GitHub release tagged `v{version}` and uploads the APK
+5. Deletes the local APK (it lives in the GitHub release)
+
+The APK will appear under **Releases** on the GitHub repo. Anyone can download and sideload it on an Android device.
+
+> **Sideloading on Android:** the device must have **Install unknown apps** enabled (Settings → Apps → Special app access → Install unknown apps).
+
+---
+
 ## Project Structure
 
 ```
 PatientApp/
-├── App.js                  # Root component, navigation setup
+├── App.js                      # Root component, navigation setup
+├── release.sh                  # Build + publish APK to GitHub Releases
 ├── src/
-│   ├── HomeScreen.js       # Landing page with navigation cards
-│   ├── AddPatientScreen.js # Form to register a new patient
-│   ├── SearchScreen.js     # Search and list all patients
-│   └── database.js         # SQLite helpers (open DB, insert, query)
-├── assets/                 # Icons and splash screen images
-├── app.json                # Expo config
+│   ├── HomeScreen.js           # Landing page with navigation cards
+│   ├── AddPatientScreen.js     # Form to register a new patient
+│   ├── SearchScreen.js         # Search and list all patients
+│   ├── PatientDetailScreen.js  # Patient info, Rx fields, medicines
+│   └── database.js             # SQLite helpers (patients + medicines)
+├── assets/                     # Icons and splash screen images
+├── app.json                    # Expo config (version + versionCode)
+├── eas.json                    # EAS build profiles
 └── package.json
 ```
 

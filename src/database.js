@@ -8,8 +8,17 @@ const MOCK_PATIENTS = [
   { name: 'Carol Nguyen', phone: '555-505-6060', address: '4 Elm Court, Capital City, IL' },
 ];
 
+const ALICE_MEDICINES = [
+  { name: 'Amoxicillin',  dosage: '500mg', frequency: 'Three times daily', duration: '7 days',  route: 'Oral', instructions: 'Take after meals'  },
+  { name: 'Ibuprofen',    dosage: '400mg', frequency: 'Twice daily',        duration: '5 days',  route: 'Oral', instructions: 'Take with food'     },
+  { name: 'Loratadine',   dosage: '10mg',  frequency: 'Once daily',         duration: '30 days', route: 'Oral', instructions: ''                   },
+];
+
 export async function getDb() {
   if (!db) {
+    if (__DEV__) {
+      try { await SQLite.deleteDatabaseAsync('patients.db'); } catch {}
+    }
     db = await SQLite.openDatabaseAsync('patients.db');
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS patients (
@@ -18,14 +27,31 @@ export async function getDb() {
         phone TEXT NOT NULL,
         address TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS medicines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        dosage TEXT,
+        frequency TEXT,
+        duration TEXT,
+        route TEXT,
+        instructions TEXT
+      );
     `);
 
     if (__DEV__) {
-      await db.execAsync('DELETE FROM patients;');
+      let aliceId;
       for (const p of MOCK_PATIENTS) {
-        await db.runAsync(
+        const result = await db.runAsync(
           'INSERT INTO patients (name, phone, address) VALUES (?, ?, ?)',
           [p.name, p.phone, p.address]
+        );
+        if (p.name === 'Alice Johnson') aliceId = result.lastInsertRowId;
+      }
+      for (const m of ALICE_MEDICINES) {
+        await db.runAsync(
+          'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [aliceId, m.name, m.dosage, m.frequency, m.duration, m.route, m.instructions]
         );
       }
     }
@@ -53,4 +79,26 @@ export async function searchPatients(query) {
 export async function getAllPatients() {
   const database = await getDb();
   return await database.getAllAsync('SELECT * FROM patients ORDER BY name ASC');
+}
+
+export async function getMedicines(patientId) {
+  const database = await getDb();
+  return await database.getAllAsync(
+    'SELECT * FROM medicines WHERE patient_id = ? ORDER BY id ASC',
+    [patientId]
+  );
+}
+
+export async function addMedicine(patientId, { name, dosage, frequency, duration, route, instructions }) {
+  const database = await getDb();
+  const result = await database.runAsync(
+    'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [patientId, name, dosage ?? '', frequency ?? '', duration ?? '', route ?? '', instructions ?? '']
+  );
+  return result.lastInsertRowId;
+}
+
+export async function deleteMedicine(id) {
+  const database = await getDb();
+  await database.runAsync('DELETE FROM medicines WHERE id = ?', [id]);
 }
