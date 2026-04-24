@@ -1,14 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Keyboard,
+  Animated,
 } from 'react-native';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 
 function TabBar({ active, onChange }) {
   const tabs = ['Personal', 'Rx'];
@@ -21,51 +29,41 @@ function TabBar({ active, onChange }) {
           onPress={() => onChange(tab)}
           activeOpacity={0.7}
         >
-          <Text style={[styles.tabText, active === tab && styles.tabTextActive]}>
-            {tab}
-          </Text>
+          <Text style={[styles.tabText, active === tab && styles.tabTextActive]}>{tab}</Text>
         </TouchableOpacity>
       ))}
     </View>
   );
 }
 
-function Field({ label, value, onChange, multiline, keyboardType }) {
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
-        value={value}
-        onChangeText={onChange}
-        multiline={multiline}
-        numberOfLines={multiline ? 3 : 1}
-        textAlignVertical={multiline ? 'top' : 'center'}
-        keyboardType={keyboardType}
-        placeholderTextColor="#bbb"
-        placeholder="—"
-      />
-    </View>
-  );
-}
+const Field = React.forwardRef(({ label, value, onChange, onFocus, multiline, keyboardType }, ref) => (
+  <View style={styles.fieldGroup}>
+    <Text style={styles.fieldLabel}>{label}</Text>
+    <TextInput
+      ref={ref}
+      style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
+      value={value}
+      onChangeText={onChange}
+      onFocus={onFocus}
+      multiline={multiline}
+      numberOfLines={multiline ? 3 : 1}
+      textAlignVertical={multiline ? 'top' : 'center'}
+      keyboardType={keyboardType}
+      placeholderTextColor="#bbb"
+      placeholder="—"
+    />
+  </View>
+));
 
-function PersonalTab({ patient }) {
+export default function PatientDetailScreen({ route }) {
+  const { patient } = route.params;
+  const [activeTab, setActiveTab] = useState('Personal');
+  const [recognizing, setRecognizing] = useState(false);
+
+  // Personal fields
   const [notes, setNotes] = useState('');
 
-  return (
-    <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.infoCard}>
-        <Text style={styles.name}>{patient.name}</Text>
-        <Text style={styles.detail}>📞 {patient.phone}</Text>
-        <Text style={styles.detail}>📍 {patient.address}</Text>
-      </View>
-
-      <Field label="Notes" value={notes} onChange={setNotes} multiline />
-    </ScrollView>
-  );
-}
-
-function RxTab() {
+  // Rx fields
   const [complaints, setComplaints] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [investigations, setInvestigations] = useState('');
@@ -75,62 +73,186 @@ function RxTab() {
   const [weight, setWeight] = useState('');
   const [weightUnit, setWeightUnit] = useState('kg');
 
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
-        <Field label="Complaints"     value={complaints}     onChange={setComplaints}     multiline />
-        <Field label="Diagnosis"      value={diagnosis}      onChange={setDiagnosis}      multiline />
-        <Field label="Investigations" value={investigations} onChange={setInvestigations} multiline />
-        <Field label="Procedures"     value={procedures}     onChange={setProcedures}     multiline />
-        <Field label="Findings"       value={findings}       onChange={setFindings}       multiline />
-        <Field label="Blood Pressure (mmHg)" value={bp} onChange={setBp} />
+  // Refs
+  const notesRef = useRef(null);
+  const complaintsRef = useRef(null);
+  const diagnosisRef = useRef(null);
+  const investigationsRef = useRef(null);
+  const proceduresRef = useRef(null);
+  const findingsRef = useRef(null);
+  const bpRef = useRef(null);
+  const weightRef = useRef(null);
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Weight</Text>
-          <View style={styles.weightRow}>
-            <TextInput
-              style={[styles.fieldInput, styles.weightInput]}
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="decimal-pad"
-              placeholder="—"
-              placeholderTextColor="#bbb"
-            />
-            <View style={styles.unitToggle}>
-              {['kg', 'lbs'].map((unit) => (
-                <TouchableOpacity
-                  key={unit}
-                  style={[styles.unitBtn, weightUnit === unit && styles.unitBtnActive]}
-                  onPress={() => setWeightUnit(unit)}
-                >
-                  <Text style={[styles.unitBtnText, weightUnit === unit && styles.unitBtnTextActive]}>
-                    {unit}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
+  const activeIndexRef = useRef(0);
+  const shouldAdvanceRef = useRef(false);
+  const fabBottom = useRef(new Animated.Value(32)).current;
 
-export default function PatientDetailScreen({ route }) {
-  const { patient } = route.params;
-  const [activeTab, setActiveTab] = useState('Personal');
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => Animated.timing(fabBottom, {
+        toValue: e.endCoordinates.height + 16,
+        duration: e.duration ?? 250,
+        useNativeDriver: false,
+      }).start()
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      (e) => Animated.timing(fabBottom, {
+        toValue: 32,
+        duration: e.duration ?? 250,
+        useNativeDriver: false,
+      }).start()
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  const personalFields = [
+    { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true },
+  ];
+
+  const rxFields = [
+    { ref: complaintsRef,     setter: setComplaints,     value: complaints,     label: 'Complaints',            multiline: true  },
+    { ref: diagnosisRef,      setter: setDiagnosis,      value: diagnosis,      label: 'Diagnosis',             multiline: true  },
+    { ref: investigationsRef, setter: setInvestigations, value: investigations, label: 'Investigations',        multiline: true  },
+    { ref: proceduresRef,     setter: setProcedures,     value: procedures,     label: 'Procedures',            multiline: true  },
+    { ref: findingsRef,       setter: setFindings,       value: findings,       label: 'Findings',              multiline: true  },
+    { ref: bpRef,             setter: setBp,             value: bp,             label: 'Blood Pressure (mmHg)', multiline: false },
+    { ref: weightRef,         setter: setWeight,         value: weight,         label: 'Weight',                multiline: false, keyboardType: 'decimal-pad' },
+  ];
+
+  const currentFields = activeTab === 'Personal' ? personalFields : rxFields;
+
+  useSpeechRecognitionEvent('start', () => setRecognizing(true));
+  useSpeechRecognitionEvent('end', () => {
+    setRecognizing(false);
+    if (shouldAdvanceRef.current) {
+      shouldAdvanceRef.current = false;
+      const next = (activeIndexRef.current + 1) % currentFields.length;
+      activeIndexRef.current = next;
+      currentFields[next]?.ref.current?.focus();
+    }
+  });
+  useSpeechRecognitionEvent('result', (event) => {
+    const text = event.results[0]?.transcript ?? '';
+    const field = currentFields[activeIndexRef.current];
+    if (text && field) field.setter(text);
+  });
+  useSpeechRecognitionEvent('error', (event) => {
+    Alert.alert('Dictation error', event.message ?? 'Something went wrong.');
+    setRecognizing(false);
+  });
+
+  function handleTabChange(tab) {
+    activeIndexRef.current = 0;
+    setActiveTab(tab);
+  }
+
+  // Tap: start dictation, or stop + next field if already dictating
+  async function handlePress() {
+    if (recognizing) {
+      shouldAdvanceRef.current = true;
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+    const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
+      Alert.alert('Permission required', 'Microphone access is needed for dictation.');
+      return;
+    }
+    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true });
+  }
+
+  // Hold: stop dictation without advancing
+  function handleLongPress() {
+    if (recognizing) {
+      ExpoSpeechRecognitionModule.stop();
+    }
+  }
 
   return (
     <View style={styles.container}>
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar active={activeTab} onChange={handleTabChange} />
+
       {activeTab === 'Personal' ? (
-        <PersonalTab patient={patient} />
+        <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.infoCard}>
+            <Text style={styles.name}>{patient.name}</Text>
+            <Text style={styles.detail}>📞 {patient.phone}</Text>
+            <Text style={styles.detail}>📍 {patient.address}</Text>
+          </View>
+          {personalFields.map((f, i) => (
+            <Field
+              key={f.label}
+              ref={f.ref}
+              label={f.label}
+              value={f.value}
+              onChange={f.setter}
+              onFocus={() => { activeIndexRef.current = i; }}
+              multiline={f.multiline}
+            />
+          ))}
+        </ScrollView>
       ) : (
-        <RxTab />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
+            {rxFields.map((f, i) =>
+              f.label === 'Weight' ? (
+                <View key={f.label} style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Weight</Text>
+                  <View style={styles.weightRow}>
+                    <TextInput
+                      ref={f.ref}
+                      style={[styles.fieldInput, styles.weightInput]}
+                      value={f.value}
+                      onChangeText={f.setter}
+                      onFocus={() => { activeIndexRef.current = i; }}
+                      keyboardType="decimal-pad"
+                      placeholder="—"
+                      placeholderTextColor="#bbb"
+                    />
+                    <View style={styles.unitToggle}>
+                      {['kg', 'lbs'].map((unit) => (
+                        <TouchableOpacity
+                          key={unit}
+                          style={[styles.unitBtn, weightUnit === unit && styles.unitBtnActive]}
+                          onPress={() => setWeightUnit(unit)}
+                        >
+                          <Text style={[styles.unitBtnText, weightUnit === unit && styles.unitBtnTextActive]}>
+                            {unit}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <Field
+                  key={f.label}
+                  ref={f.ref}
+                  label={f.label}
+                  value={f.value}
+                  onChange={f.setter}
+                  onFocus={() => { activeIndexRef.current = i; }}
+                  multiline={f.multiline}
+                  keyboardType={f.keyboardType}
+                />
+              )
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
       )}
+
+      <Animated.View style={[styles.fab, { bottom: fabBottom }]}>
+        <Pressable
+          style={[styles.fabInner, recognizing && styles.fabActive]}
+          onPress={handlePress}
+          onLongPress={handleLongPress}
+          delayLongPress={500}
+        >
+          <Text style={styles.fabIcon}>{recognizing ? '⏹' : '🎙'}</Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -166,7 +288,7 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     padding: 24,
-    paddingBottom: 48,
+    paddingBottom: 100,
     flexGrow: 1,
   },
   infoCard: {
@@ -246,5 +368,31 @@ const styles = StyleSheet.create({
   },
   unitBtnTextActive: {
     color: '#fff',
+  },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#4f6ef7',
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  fabInner: {
+    flex: 1,
+    borderRadius: 32,
+    backgroundColor: '#4f6ef7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabActive: {
+    backgroundColor: '#e74c3c',
+  },
+  fabIcon: {
+    fontSize: 28,
   },
 });
