@@ -12,8 +12,27 @@ import {
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 
-export default function PatientDetailScreen({ route }) {
-  const { patient } = route.params;
+function TabBar({ active, onChange }) {
+  const tabs = ['Personal', 'Rx'];
+  return (
+    <View style={styles.tabBar}>
+      {tabs.map((tab) => (
+        <TouchableOpacity
+          key={tab}
+          style={[styles.tab, active === tab && styles.tabActive]}
+          onPress={() => onChange(tab)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabText, active === tab && styles.tabTextActive]}>
+            {tab}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+function PersonalTab({ patient }) {
   const [recognizing, setRecognizing] = useState(false);
   const [transcript, setTranscript] = useState('');
 
@@ -42,7 +61,7 @@ export default function PatientDetailScreen({ route }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={styles.tabContent}>
       <View style={styles.infoCard}>
         <Text style={styles.name}>{patient.name}</Text>
         <Text style={styles.detail}>📞 {patient.phone}</Text>
@@ -74,11 +93,62 @@ export default function PatientDetailScreen({ route }) {
   );
 }
 
+function RxTab() {
+  return (
+    <View style={styles.tabContent}>
+      <Text style={styles.empty}>No prescriptions yet.</Text>
+    </View>
+  );
+}
+
+export default function PatientDetailScreen({ route }) {
+  const { patient } = route.params;
+  const [activeTab, setActiveTab] = useState('Personal');
+
+  return (
+    <View style={styles.container}>
+      <TabBar active={activeTab} onChange={setActiveTab} />
+      {activeTab === 'Personal' ? (
+        <PersonalTab patient={patient} />
+      ) : (
+        <RxTab />
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#f5f6fa',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8e8e8',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#4f6ef7',
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#999',
+  },
+  tabTextActive: {
+    color: '#4f6ef7',
+  },
+  tabContent: {
     padding: 24,
     paddingBottom: 48,
-    backgroundColor: '#f5f6fa',
     flexGrow: 1,
   },
   infoCard: {
@@ -158,5 +228,11 @@ const styles = StyleSheet.create({
     color: '#4f6ef7',
     fontSize: 14,
     fontWeight: '600',
+  },
+  empty: {
+    textAlign: 'center',
+    marginTop: 60,
+    color: '#999',
+    fontSize: 16,
   },
 });
