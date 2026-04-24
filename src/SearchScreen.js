@@ -6,20 +6,21 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { searchPatients, getAllPatients } from './database';
 
-function PatientCard({ patient }) {
+function PatientCard({ patient, onPress }) {
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
       <Text style={styles.cardName}>{patient.name}</Text>
       <Text style={styles.cardDetail}>📞 {patient.phone}</Text>
       <Text style={styles.cardDetail}>📍 {patient.address}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-export default function SearchScreen() {
+export default function SearchScreen({ navigation }) {
   const [query, setQuery] = useState('');
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +67,12 @@ export default function SearchScreen() {
         <FlatList
           data={patients}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <PatientCard patient={item} />}
+          renderItem={({ item }) => (
+            <PatientCard
+              patient={item}
+              onPress={() => navigation.navigate('PatientDetail', { patient: item })}
+            />
+          )}
           contentContainerStyle={{ paddingBottom: 24 }}
         />
       )}

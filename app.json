@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow PatientApp to recognize your speech for dictation.",
+        "NSMicrophoneUsageDescription": "Allow PatientApp to use your microphone for dictation."
+      },
+      "bundleIdentifier": "com.patientapp.patients"
     },
     "android": {
       "package": "com.patientapp.patients",
@@ -22,13 +27,23 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow PatientApp to use your microphone for dictation.",
+          "speechRecognitionPermission": "Allow PatientApp to recognize your speech for dictation."
+        }
+      ]
     ]
   }
 }

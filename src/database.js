@@ -2,6 +2,12 @@ import * as SQLite from 'expo-sqlite';
 
 let db;
 
+const MOCK_PATIENTS = [
+  { name: 'Alice Johnson', phone: '555-101-2020', address: '12 Maple Ave, Springfield, IL' },
+  { name: 'Bob Martinez', phone: '555-303-4040', address: '88 Oak Street, Shelbyville, IL' },
+  { name: 'Carol Nguyen', phone: '555-505-6060', address: '4 Elm Court, Capital City, IL' },
+];
+
 export async function getDb() {
   if (!db) {
     db = await SQLite.openDatabaseAsync('patients.db');
@@ -13,6 +19,16 @@ export async function getDb() {
         address TEXT NOT NULL
       );
     `);
+
+    if (__DEV__) {
+      await db.execAsync('DELETE FROM patients;');
+      for (const p of MOCK_PATIENTS) {
+        await db.runAsync(
+          'INSERT INTO patients (name, phone, address) VALUES (?, ?, ?)',
+          [p.name, p.phone, p.address]
+        );
+      }
+    }
   }
   return db;
 }

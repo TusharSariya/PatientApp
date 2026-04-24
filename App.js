@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import HomeScreen from './src/HomeScreen';
 import AddPatientScreen from './src/AddPatientScreen';
 import SearchScreen from './src/SearchScreen';
+import PatientDetailScreen from './src/PatientDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +35,11 @@ export default function App() {
           name="Search"
           component={SearchScreen}
           options={{ title: 'Search Patients' }}
+        />
+        <Stack.Screen
+          name="PatientDetail"
+          component={PatientDetailScreen}
+          options={({ route }) => ({ title: route.params.patient.name })}
         />
       </Stack.Navigator>
     </NavigationContainer>
