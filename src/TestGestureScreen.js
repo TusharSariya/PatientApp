@@ -20,6 +20,7 @@ export default function TestGestureScreen() {
   const [padResetKey, setPadResetKey] = useState(0);
   const [resultState, setResultState] = useState('idle');
   const [result, setResult] = useState(null);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -48,13 +49,12 @@ export default function TestGestureScreen() {
   const compatibleGestures = gestures.filter(gesture => isTouchGestureData(gesture.data));
 
   function handleDrawingChange(isDrawing) {
-    if (isDrawing) {
-      setResultState('idle');
-      setResult(null);
-    }
+    setIsDrawing(isDrawing);
+    if (isDrawing) setResult(null);
   }
 
   function handleGestureComplete(gesture) {
+    setIsDrawing(false);
     if (!gesture) {
       setResultState('invalid');
       setResult(null);
@@ -70,12 +70,13 @@ export default function TestGestureScreen() {
     setPadResetKey(previous => previous + 1);
     setResultState('idle');
     setResult(null);
+    setIsDrawing(false);
   }
 
   const hasCompatibleGestures = compatibleGestures.length > 0;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={styles.container} scrollEnabled={!isDrawing}>
       <View style={styles.heroCard}>
         <Text style={styles.heroEyebrow}>Touch Gesture Recognition</Text>
         <Text style={styles.heroTitle}>Draw a saved gesture to reveal its associated word.</Text>
@@ -103,32 +104,58 @@ export default function TestGestureScreen() {
               onDrawingChange={handleDrawingChange}
             />
 
-            {resultState === 'match' ? (
-              <View style={styles.resultMatch}>
-                <Text style={styles.resultLabel}>Associated Word</Text>
-                <Text style={styles.resultWord}>{result.word}</Text>
-              </View>
-            ) : null}
+            <View
+              style={[
+                styles.resultPanel,
+                resultState === 'match' && styles.resultMatch,
+                (resultState === 'no-match' || resultState === 'invalid') && styles.resultNone,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.resultLabel,
+                  resultState === 'match' && styles.resultLabelMatch,
+                  (resultState === 'no-match' || resultState === 'invalid') && styles.resultLabelWarn,
+                ]}
+              >
+                {isDrawing
+                  ? 'Drawing'
+                  : resultState === 'match'
+                    ? 'Associated Word'
+                    : resultState === 'no-match'
+                      ? 'No Matching Gesture'
+                      : resultState === 'invalid'
+                        ? 'Gesture Too Small'
+                        : 'Ready'}
+              </Text>
+              <Text
+                style={[
+                  styles.resultBody,
+                  resultState === 'match' && styles.resultWord,
+                  (resultState === 'no-match' || resultState === 'invalid') && styles.resultNoneText,
+                ]}
+              >
+                {isDrawing
+                  ? 'Finish the gesture by lifting your fingers.'
+                  : resultState === 'match'
+                    ? result.word
+                    : resultState === 'no-match'
+                      ? 'Try again with a clearer or more consistent touch path.'
+                      : resultState === 'invalid'
+                        ? 'Draw a larger gesture before lifting your fingers.'
+                        : hasCompatibleGestures
+                          ? 'Draw inside the pad to test a saved gesture.'
+                          : 'Add at least one touch gesture to start testing.'}
+              </Text>
+            </View>
 
-            {resultState === 'no-match' ? (
-              <View style={styles.resultNone}>
-                <Text style={styles.resultNoneText}>No matching gesture</Text>
-                <Text style={styles.resultNoneSub}>Try again with a clearer or more consistent touch path.</Text>
-              </View>
-            ) : null}
-
-            {resultState === 'invalid' ? (
-              <View style={styles.resultNone}>
-                <Text style={styles.resultNoneText}>Gesture too small</Text>
-                <Text style={styles.resultNoneSub}>Draw a larger gesture before lifting your fingers.</Text>
-              </View>
-            ) : null}
-
-            {resultState !== 'idle' ? (
-              <TouchableOpacity onPress={handleClear}>
-                <Text style={styles.secondaryLink}>Clear Result</Text>
-              </TouchableOpacity>
-            ) : null}
+            <View style={styles.linkSlot}>
+              {(resultState !== 'idle' || isDrawing) ? (
+                <TouchableOpacity onPress={handleClear}>
+                  <Text style={styles.secondaryLink}>Clear Result</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </>
         )}
       </View>
@@ -187,20 +214,38 @@ const styles = StyleSheet.create({
   loader: {
     marginVertical: 24,
   },
-  resultMatch: {
+  resultPanel: {
     alignItems: 'center',
-    backgroundColor: '#eafaf1',
     borderRadius: 14,
     paddingVertical: 24,
     paddingHorizontal: 16,
     marginTop: 16,
+    minHeight: 128,
+    justifyContent: 'center',
+    backgroundColor: '#f3f5fb',
   },
   resultLabel: {
     fontSize: 13,
-    color: '#27ae60',
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    color: '#61708a',
+  },
+  resultLabelMatch: {
+    color: '#27ae60',
+  },
+  resultLabelWarn: {
+    color: '#e67e22',
+  },
+  resultBody: {
+    fontSize: 15,
+    color: '#61708a',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  resultMatch: {
+    backgroundColor: '#eafaf1',
   },
   resultWord: {
     fontSize: 36,
@@ -208,26 +253,21 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
     marginTop: 6,
     textAlign: 'center',
+    lineHeight: 40,
   },
   resultNone: {
-    alignItems: 'center',
     backgroundColor: '#fef9f0',
-    borderRadius: 14,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    marginTop: 16,
   },
   resultNoneText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#e67e22',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#a8661d',
     textAlign: 'center',
+    lineHeight: 22,
   },
-  resultNoneSub: {
-    fontSize: 13,
-    color: '#999',
-    marginTop: 6,
-    textAlign: 'center',
+  linkSlot: {
+    minHeight: 28,
+    justifyContent: 'center',
   },
   secondaryLink: {
     color: '#4f6ef7',

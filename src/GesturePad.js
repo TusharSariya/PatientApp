@@ -116,6 +116,7 @@ export default function GesturePad({
         onMoveShouldSetResponder={() => !disabled}
         onStartShouldSetResponderCapture={() => !disabled}
         onMoveShouldSetResponderCapture={() => !disabled}
+        onResponderTerminationRequest={() => false}
         onResponderGrant={handleGrant}
         onResponderMove={handleMove}
         onResponderRelease={handleRelease}

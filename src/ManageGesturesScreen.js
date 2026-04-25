@@ -69,6 +69,7 @@ const sheet = StyleSheet.create({
 function AddSheet({ onSaved, onBusyChange }) {
   const [word, setWord] = useState('');
   const [data, setData] = useState(null);
+  const [isDrawing, setIsDrawing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [padResetKey, setPadResetKey] = useState(0);
 
@@ -92,8 +93,18 @@ function AddSheet({ onSaved, onBusyChange }) {
     setPadResetKey(previous => previous + 1);
   }
 
+  function handleDrawingChange(drawing) {
+    setIsDrawing(drawing);
+    if (drawing) setData(null);
+    onBusyChange?.(drawing);
+  }
+
   return (
-    <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      scrollEnabled={!isDrawing}
+    >
       <Text style={styles.fieldLabel}>Word *</Text>
       <TextInput
         style={[styles.fieldInput, { marginBottom: 20 }]}
@@ -108,27 +119,30 @@ function AddSheet({ onSaved, onBusyChange }) {
       <Text style={styles.hint}>Draw the gesture using one or more fingers, then lift them to capture it.</Text>
       <GesturePad
         resetKey={padResetKey}
-        onGestureChange={gesture => setData(gesture)}
         onGestureComplete={gesture => setData(gesture)}
-        onDrawingChange={onBusyChange}
+        onDrawingChange={handleDrawingChange}
       />
 
-      {data ? (
-        <>
-          <View style={styles.captureCard}>
-            <Text style={styles.captureLabel}>Captured</Text>
-            <Text style={styles.captureValue}>
-              {data.maxTouches} finger{data.maxTouches === 1 ? '' : 's'} · {data.points.length} normalized samples
-            </Text>
-          </View>
+      <View style={styles.captureCard}>
+        <Text style={styles.captureLabel}>
+          {isDrawing ? 'Drawing' : data ? 'Captured' : 'Awaiting Gesture'}
+        </Text>
+        <Text style={styles.captureValue}>
+          {isDrawing
+            ? 'Lift your fingers to capture this gesture.'
+            : data
+              ? `${data.maxTouches} finger${data.maxTouches === 1 ? '' : 's'} · ${data.points.length} normalized samples`
+              : 'Draw a gesture large enough to enable saving.'}
+        </Text>
+      </View>
 
+      <View style={styles.linkSlot}>
+        {data ? (
           <TouchableOpacity onPress={handleClearGesture}>
             <Text style={styles.reRecordLink}>Clear Gesture</Text>
           </TouchableOpacity>
-        </>
-      ) : (
-        <Text style={styles.captureHint}>Draw a gesture large enough to enable saving.</Text>
-      )}
+        ) : null}
+      </View>
 
       <TouchableOpacity
         style={[styles.saveBtn, (!word.trim() || !data || saving) && styles.saveBtnDisabled]}
@@ -318,6 +332,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef2ff',
     padding: 16,
     alignItems: 'center',
+    minHeight: 88,
+    justifyContent: 'center',
   },
   captureLabel: {
     fontSize: 12,
@@ -332,11 +348,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
   },
-  captureHint: {
-    fontSize: 13,
-    color: '#999',
-    marginTop: 12,
-    textAlign: 'center',
+  linkSlot: {
+    minHeight: 28,
+    justifyContent: 'center',
   },
   reRecordLink: {
     color: '#4f6ef7',
