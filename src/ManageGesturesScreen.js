@@ -1,23 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
   Alert,
-  Pressable,
-  Platform,
-  Modal,
   Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { getGestures, addGesture, deleteGesture } from './database';
-import { recordGesture } from './gestureRecognizer';
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+import GesturePad from './GesturePad';
+import { addGesture, deleteGesture, getGestures } from './database';
 
-// ---- BottomSheet ----
 function BottomSheet({ visible, onClose, title, children, closeDisabled = false }) {
   function handleClose() {
     if (!closeDisabled) onClose();
@@ -38,167 +36,60 @@ function BottomSheet({ visible, onClose, title, children, closeDisabled = false 
 }
 
 const sheet = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
   container: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 24,
     paddingBottom: Platform.OS === 'ios' ? 44 : 24,
-    maxHeight: '85%',
+    maxHeight: '90%',
   },
   handle: {
-    width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd',
-    alignSelf: 'center', marginTop: 12, marginBottom: 20,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#ddd',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
   },
-  title: { fontSize: 18, fontWeight: '700', color: '#1a1a2e', marginBottom: 20 },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: 20,
+  },
 });
 
-// ---- RecordWidget ----
-function RecordWidget({ onDone, onPhaseChange }) {
-  const [phase, setPhase] = useState('idle'); // idle | countdown | recording | done
-  const [count, setCount] = useState(3);
-  const [progress, setProgress] = useState(0);
-  const mounted = useRef(true);
-
-  useEffect(() => () => { mounted.current = false; }, []);
-  useEffect(() => { onPhaseChange?.(phase); }, [phase, onPhaseChange]);
-
-  function reset() {
-    setPhase('idle');
-    setCount(3);
-    setProgress(0);
-  }
-
-  async function start() {
-    Keyboard.dismiss();
-    for (let i = 3; i >= 1; i--) {
-      if (!mounted.current) return;
-      setPhase('countdown');
-      setCount(i);
-      await sleep(1000);
-    }
-    if (!mounted.current) return;
-    setPhase('recording');
-    setProgress(0);
-
-    try {
-      const data = await recordGesture(p => {
-        if (mounted.current) setProgress(p);
-      });
-      console.log('[gesture] recorded', data?.length, 'samples');
-      if (!mounted.current) return;
-      setPhase('done');
-      onDone(data);
-    } catch (e) {
-      console.warn('[gesture] recording error', e);
-      if (!mounted.current) return;
-      setPhase('idle');
-      Alert.alert('Recording failed', String(e?.message ?? e));
-    }
-  }
-
-  if (phase === 'countdown') {
-    return (
-      <View style={rec.box}>
-        <Text style={rec.countNum}>{count}</Text>
-        <Text style={rec.countSub}>Get ready…</Text>
-      </View>
-    );
-  }
-
-  if (phase === 'recording') {
-    return (
-      <View style={rec.box}>
-        <View style={rec.track}>
-          <View style={[rec.fill, { width: `${Math.round(progress * 100)}%` }]} />
-        </View>
-        <Text style={rec.recordingLabel}>Recording…</Text>
-      </View>
-    );
-  }
-
-  if (phase === 'done') {
-    return (
-      <View style={rec.box}>
-        <Text style={rec.doneText}>✓ Captured</Text>
-      </View>
-    );
-  }
-
-  return (
-    <TouchableOpacity style={rec.btn} onPress={start} activeOpacity={0.75}>
-      <Text style={rec.btnText}>⏺  Record Gesture</Text>
-    </TouchableOpacity>
-  );
-}
-
-const rec = StyleSheet.create({
-  box: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    backgroundColor: '#f8f9ff',
-    borderRadius: 14,
-    marginBottom: 4,
-  },
-  countNum: { fontSize: 52, fontWeight: '800', color: '#4f6ef7' },
-  countSub: { fontSize: 14, color: '#888', marginTop: 4 },
-  track: {
-    width: '80%', height: 8, backgroundColor: '#e8e8e8',
-    borderRadius: 4, overflow: 'hidden', marginBottom: 10,
-  },
-  fill: { height: '100%', backgroundColor: '#4f6ef7', borderRadius: 4 },
-  recordingLabel: { fontSize: 14, color: '#555' },
-  doneText: { fontSize: 18, fontWeight: '700', color: '#27ae60', marginBottom: 8 },
-  reRecord: { fontSize: 14, color: '#4f6ef7', fontWeight: '600' },
-  btn: {
-    backgroundColor: '#4f6ef7',
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-});
-
-// ---- AddSheet ----
 function AddSheet({ onSaved, onBusyChange }) {
   const [word, setWord] = useState('');
   const [data, setData] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [widgetKey, setWidgetKey] = useState(0);
-  const [recordPhase, setRecordPhase] = useState('idle');
-
-  useEffect(() => {
-    console.log('[AddSheet] mounted');
-    return () => console.log('[AddSheet] unmounted');
-  }, []);
-
-  useEffect(() => {
-    console.log('[AddSheet] state: word=', JSON.stringify(word), 'dataLen=', data?.length, 'saving=', saving);
-  }, [word, data, saving]);
-
-  useEffect(() => {
-    const isBusy = recordPhase === 'countdown' || recordPhase === 'recording';
-    onBusyChange?.(isBusy);
-  }, [recordPhase, onBusyChange]);
-
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  const [padResetKey, setPadResetKey] = useState(0);
 
   async function handleSave() {
     Keyboard.dismiss();
-    console.log('[gesture] handleSave word=', word, 'dataLen=', data?.length);
     if (!word.trim() || !data) return;
+
     setSaving(true);
     try {
-      const id = await addGesture(word.trim(), JSON.stringify(data));
-      console.log('[gesture] saved with id', id);
+      await addGesture(word.trim(), JSON.stringify(data));
       onSaved();
-    } catch (e) {
-      console.warn('[gesture] save error', e);
-      Alert.alert('Error', String(e?.message ?? e));
+    } catch (error) {
+      Alert.alert('Error', String(error?.message ?? error));
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleClearGesture() {
+    setData(null);
+    setPadResetKey(previous => previous + 1);
   }
 
   return (
@@ -214,17 +105,29 @@ function AddSheet({ onSaved, onBusyChange }) {
       />
 
       <Text style={styles.fieldLabel}>Gesture</Text>
-      <Text style={styles.hint}>Press record, then perform your gesture</Text>
-      <RecordWidget
-        key={widgetKey}
-        onDone={d => { console.log('[AddSheet] onDone called with', d?.length, 'samples'); setData(d); }}
-        onPhaseChange={setRecordPhase}
+      <Text style={styles.hint}>Draw the gesture using one or more fingers, then lift them to capture it.</Text>
+      <GesturePad
+        resetKey={padResetKey}
+        onGestureChange={gesture => setData(gesture)}
+        onGestureComplete={gesture => setData(gesture)}
+        onDrawingChange={onBusyChange}
       />
 
-      {data && (
-        <TouchableOpacity onPress={() => { setData(null); setWidgetKey(k => k + 1); }}>
-          <Text style={styles.reRecordLink}>Re-record</Text>
-        </TouchableOpacity>
+      {data ? (
+        <>
+          <View style={styles.captureCard}>
+            <Text style={styles.captureLabel}>Captured</Text>
+            <Text style={styles.captureValue}>
+              {data.maxTouches} finger{data.maxTouches === 1 ? '' : 's'} · {data.points.length} normalized samples
+            </Text>
+          </View>
+
+          <TouchableOpacity onPress={handleClearGesture}>
+            <Text style={styles.reRecordLink}>Clear Gesture</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <Text style={styles.captureHint}>Draw a gesture large enough to enable saving.</Text>
       )}
 
       <TouchableOpacity
@@ -233,14 +136,13 @@ function AddSheet({ onSaved, onBusyChange }) {
         disabled={!word.trim() || !data || saving}
       >
         <Text style={styles.saveBtnText}>
-          {saving ? 'Saving…' : !word.trim() ? 'Enter a word above' : !data ? 'Record a gesture above' : 'Save Gesture'}
+          {saving ? 'Saving…' : !word.trim() ? 'Enter a word above' : !data ? 'Capture a gesture above' : 'Save Gesture'}
         </Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-// ---- Main Screen ----
 export default function ManageGesturesScreen({ navigation }) {
   const [gestures, setGestures] = useState([]);
   const [addVisible, setAddVisible] = useState(false);
@@ -249,27 +151,29 @@ export default function ManageGesturesScreen({ navigation }) {
   const load = useCallback(async () => {
     try {
       const rows = await getGestures();
-      console.log('[gesture] load returned', rows.length, 'rows');
       setGestures(rows);
-    } catch (e) {
-      console.warn('[gesture] load error', e);
-      Alert.alert('Could not load gestures', String(e?.message ?? e));
+    } catch (error) {
+      Alert.alert('Could not load gestures', String(error?.message ?? error));
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
   useEffect(() => {
     if (!addVisible) setAddSheetBusy(false);
   }, [addVisible]);
 
-  function handleDelete(g) {
-    Alert.alert('Delete Gesture', `Remove "${g.word}"?`, [
+  function handleDelete(gesture) {
+    Alert.alert('Delete Gesture', `Remove "${gesture.word}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete', style: 'destructive',
+        text: 'Delete',
+        style: 'destructive',
         onPress: async () => {
-          await deleteGesture(g.id);
-          setGestures(prev => prev.filter(x => x.id !== g.id));
+          await deleteGesture(gesture.id);
+          setGestures(previous => previous.filter(item => item.id !== gesture.id));
         },
       },
     ]);
@@ -283,7 +187,6 @@ export default function ManageGesturesScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Test card */}
         <TouchableOpacity
           style={styles.testCard}
           onPress={() => navigation.navigate('TestGesture')}
@@ -292,12 +195,11 @@ export default function ManageGesturesScreen({ navigation }) {
           <Text style={styles.testCardIcon}>🎯</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.testCardTitle}>Test a Gesture</Text>
-            <Text style={styles.testCardSub}>Record a gesture and see what it matches</Text>
+            <Text style={styles.testCardSub}>Draw a saved gesture and see the associated word</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
 
-        {/* Gesture list */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Saved Gestures</Text>
           <TouchableOpacity style={styles.addBtn} onPress={() => setAddVisible(true)}>
@@ -308,11 +210,14 @@ export default function ManageGesturesScreen({ navigation }) {
         {gestures.length === 0 ? (
           <Text style={styles.empty}>No gestures yet. Tap + Add to create one.</Text>
         ) : (
-          gestures.map(g => (
-            <View key={g.id} style={styles.gestureRow}>
+          gestures.map(gesture => (
+            <View key={gesture.id} style={styles.gestureRow}>
               <Text style={styles.gestureIcon}>👋</Text>
-              <Text style={styles.gestureWord}>{g.word}</Text>
-              <TouchableOpacity onPress={() => handleDelete(g)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={styles.gestureWord}>{gesture.word}</Text>
+              <TouchableOpacity
+                onPress={() => handleDelete(gesture)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Text style={styles.deleteIcon}>🗑</Text>
               </TouchableOpacity>
             </View>
@@ -320,7 +225,6 @@ export default function ManageGesturesScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* Add sheet */}
       <BottomSheet
         visible={addVisible}
         onClose={handleCloseAddSheet}
@@ -328,7 +232,11 @@ export default function ManageGesturesScreen({ navigation }) {
         closeDisabled={addSheetBusy}
       >
         <AddSheet
-          onSaved={() => { setAddSheetBusy(false); setAddVisible(false); load(); }}
+          onSaved={() => {
+            setAddSheetBusy(false);
+            setAddVisible(false);
+            load();
+          }}
           onBusyChange={setAddSheetBusy}
         />
       </BottomSheet>
@@ -339,7 +247,6 @@ export default function ManageGesturesScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6fa' },
   content: { padding: 20, paddingBottom: 40 },
-
   testCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -353,7 +260,6 @@ const styles = StyleSheet.create({
   testCardTitle: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 2 },
   testCardSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
   chevron: { fontSize: 22, color: 'rgba(255,255,255,0.6)' },
-
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,9 +274,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   addBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-
   empty: { color: '#aaa', fontSize: 14, textAlign: 'center', marginTop: 24 },
-
   gestureRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -389,11 +293,13 @@ const styles = StyleSheet.create({
   gestureIcon: { fontSize: 22 },
   gestureWord: { flex: 1, fontSize: 16, fontWeight: '600', color: '#1a1a2e' },
   deleteIcon: { fontSize: 18 },
-
-  // Shared form styles
   fieldLabel: {
-    fontSize: 13, fontWeight: '600', color: '#555',
-    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   fieldInput: {
     backgroundColor: '#f8f9ff',
@@ -405,10 +311,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1a1a2e',
   },
-  hint: { fontSize: 13, color: '#999', marginBottom: 12 },
+  hint: { fontSize: 13, color: '#999', marginBottom: 12, lineHeight: 18 },
+  captureCard: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: '#eef2ff',
+    padding: 16,
+    alignItems: 'center',
+  },
+  captureLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4f6ef7',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  captureValue: {
+    fontSize: 15,
+    color: '#1a1a2e',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  captureHint: {
+    fontSize: 13,
+    color: '#999',
+    marginTop: 12,
+    textAlign: 'center',
+  },
   reRecordLink: {
-    color: '#4f6ef7', fontWeight: '600', fontSize: 14,
-    textAlign: 'center', marginTop: 12, marginBottom: 4,
+    color: '#4f6ef7',
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 4,
   },
   saveBtn: {
     backgroundColor: '#4f6ef7',
