@@ -19,10 +19,17 @@ import {
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 import { getMedicines, addMedicine, deleteMedicine } from './database';
+import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 
 const EMPTY_FORM = { name: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' };
+
+function composeHandlers(...handlers) {
+  return (...args) => {
+    handlers.forEach(handler => handler?.(...args));
+  };
+}
 
 function BottomSheet({ visible, onClose, title, children }) {
   return (
@@ -118,15 +125,32 @@ function TabBar({ active, onChange }) {
   );
 }
 
-const Field = React.forwardRef(({ label, value, onChange, onFocus, multiline, keyboardType }, ref) => (
+const Field = React.forwardRef(({
+  label,
+  value,
+  onChange,
+  onFocus,
+  onBlur,
+  onSelectionChange,
+  selection,
+  onGesturePress,
+  multiline,
+  keyboardType,
+}, ref) => (
   <View style={styles.fieldGroup}>
-    <Text style={styles.fieldLabel}>{label}</Text>
+    <View style={styles.fieldHeader}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <GestureTriggerButton onPress={onGesturePress} />
+    </View>
     <TextInput
       ref={ref}
       style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
       value={value}
       onChangeText={onChange}
       onFocus={onFocus}
+      onBlur={onBlur}
+      onSelectionChange={onSelectionChange}
+      selection={selection}
       multiline={multiline}
       numberOfLines={multiline ? 3 : 1}
       textAlignVertical={multiline ? 'top' : 'center'}
@@ -172,6 +196,20 @@ export default function PatientDetailScreen({ route }) {
   const bpRef = useRef(null);
   const weightRef = useRef(null);
 
+  const notesInput = useGestureTextInput({ label: 'Notes', value: notes, setValue: setNotes, inputRef: notesRef });
+  const complaintsInput = useGestureTextInput({ label: 'Complaints', value: complaints, setValue: setComplaints, inputRef: complaintsRef });
+  const diagnosisInput = useGestureTextInput({ label: 'Diagnosis', value: diagnosis, setValue: setDiagnosis, inputRef: diagnosisRef });
+  const investigationsInput = useGestureTextInput({ label: 'Investigations', value: investigations, setValue: setInvestigations, inputRef: investigationsRef });
+  const proceduresInput = useGestureTextInput({ label: 'Procedures', value: procedures, setValue: setProcedures, inputRef: proceduresRef });
+  const findingsInput = useGestureTextInput({ label: 'Findings', value: findings, setValue: setFindings, inputRef: findingsRef });
+  const bpInput = useGestureTextInput({ label: 'Blood Pressure', value: bp, setValue: setBp, inputRef: bpRef });
+  const weightInput = useGestureTextInput({ label: 'Weight', value: weight, setValue: setWeight, inputRef: weightRef });
+  const medNameInput = useGestureTextInput({ label: 'Medicine Name', value: medForm.name, setValue: value => setMedForm(form => ({ ...form, name: value })) });
+  const medDosageInput = useGestureTextInput({ label: 'Medicine Dosage', value: medForm.dosage, setValue: value => setMedForm(form => ({ ...form, dosage: value })) });
+  const medFrequencyInput = useGestureTextInput({ label: 'Medicine Frequency', value: medForm.frequency, setValue: value => setMedForm(form => ({ ...form, frequency: value })) });
+  const medDurationInput = useGestureTextInput({ label: 'Medicine Duration', value: medForm.duration, setValue: value => setMedForm(form => ({ ...form, duration: value })) });
+  const medInstructionsInput = useGestureTextInput({ label: 'Medicine Instructions', value: medForm.instructions, setValue: value => setMedForm(form => ({ ...form, instructions: value })) });
+
   const activeIndexRef = useRef(0);
   const shouldAdvanceRef = useRef(false);
   const fabBottom = useRef(new Animated.Value(32)).current;
@@ -201,17 +239,17 @@ export default function PatientDetailScreen({ route }) {
   }, [patient.id]);
 
   const personalFields = [
-    { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true },
+    { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true, input: notesInput },
   ];
 
   const rxFields = [
-    { ref: complaintsRef,     setter: setComplaints,     value: complaints,     label: 'Complaints',            multiline: true  },
-    { ref: diagnosisRef,      setter: setDiagnosis,      value: diagnosis,      label: 'Diagnosis',             multiline: true  },
-    { ref: investigationsRef, setter: setInvestigations, value: investigations, label: 'Investigations',        multiline: true  },
-    { ref: proceduresRef,     setter: setProcedures,     value: procedures,     label: 'Procedures',            multiline: true  },
-    { ref: findingsRef,       setter: setFindings,       value: findings,       label: 'Findings',              multiline: true  },
-    { ref: bpRef,             setter: setBp,             value: bp,             label: 'Blood Pressure (mmHg)', multiline: false },
-    { ref: weightRef,         setter: setWeight,         value: weight,         label: 'Weight',                multiline: false, keyboardType: 'decimal-pad' },
+    { ref: complaintsRef,     setter: setComplaints,     value: complaints,     label: 'Complaints',            multiline: true,  input: complaintsInput     },
+    { ref: diagnosisRef,      setter: setDiagnosis,      value: diagnosis,      label: 'Diagnosis',             multiline: true,  input: diagnosisInput      },
+    { ref: investigationsRef, setter: setInvestigations, value: investigations, label: 'Investigations',        multiline: true,  input: investigationsInput },
+    { ref: proceduresRef,     setter: setProcedures,     value: procedures,     label: 'Procedures',            multiline: true,  input: proceduresInput     },
+    { ref: findingsRef,       setter: setFindings,       value: findings,       label: 'Findings',              multiline: true,  input: findingsInput       },
+    { ref: bpRef,             setter: setBp,             value: bp,             label: 'Blood Pressure (mmHg)', multiline: false, input: bpInput             },
+    { ref: weightRef,         setter: setWeight,         value: weight,         label: 'Weight',                multiline: false, keyboardType: 'decimal-pad', input: weightInput },
   ];
 
   const currentFields = activeTab === 'Personal' ? personalFields : rxFields;
@@ -318,7 +356,14 @@ export default function PatientDetailScreen({ route }) {
               label={f.label}
               value={f.value}
               onChange={f.setter}
-              onFocus={() => { activeIndexRef.current = i; }}
+              onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
+              onBlur={f.input.onBlur}
+              onSelectionChange={f.input.onSelectionChange}
+              selection={f.input.selection}
+              onGesturePress={() => {
+                activeIndexRef.current = i;
+                f.input.openGestureInput();
+              }}
               multiline={f.multiline}
             />
           ))}
@@ -350,14 +395,23 @@ export default function PatientDetailScreen({ route }) {
             {rxFields.map((f, i) =>
               f.label === 'Weight' ? (
                 <View key={f.label} style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Weight</Text>
+                  <View style={styles.fieldHeader}>
+                    <Text style={styles.fieldLabel}>Weight</Text>
+                    <GestureTriggerButton onPress={() => {
+                      activeIndexRef.current = i;
+                      f.input.openGestureInput();
+                    }} />
+                  </View>
                   <View style={styles.weightRow}>
                     <TextInput
                       ref={f.ref}
                       style={[styles.fieldInput, styles.weightInput]}
                       value={f.value}
                       onChangeText={f.setter}
-                      onFocus={() => { activeIndexRef.current = i; }}
+                      onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
+                      onBlur={f.input.onBlur}
+                      onSelectionChange={f.input.onSelectionChange}
+                      selection={f.input.selection}
                       keyboardType="decimal-pad"
                       placeholder="—"
                       placeholderTextColor="#bbb"
@@ -384,7 +438,14 @@ export default function PatientDetailScreen({ route }) {
                   label={f.label}
                   value={f.value}
                   onChange={f.setter}
-                  onFocus={() => { activeIndexRef.current = i; }}
+                  onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
+                  onBlur={f.input.onBlur}
+                  onSelectionChange={f.input.onSelectionChange}
+                  selection={f.input.selection}
+                  onGesturePress={() => {
+                    activeIndexRef.current = i;
+                    f.input.openGestureInput();
+                  }}
                   multiline={f.multiline}
                   keyboardType={f.keyboardType}
                 />
@@ -445,39 +506,71 @@ export default function PatientDetailScreen({ route }) {
         title="Add Medicine"
       >
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <Text style={styles.fieldLabel}>Name *</Text>
+          <View style={styles.fieldHeader}>
+            <Text style={styles.fieldLabel}>Name *</Text>
+            <GestureTriggerButton onPress={medNameInput.openGestureInput} />
+          </View>
           <TextInput
+            ref={medNameInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.name}
             onChangeText={v => setMedForm(f => ({ ...f, name: v }))}
+            onFocus={medNameInput.onFocus}
+            onBlur={medNameInput.onBlur}
+            onSelectionChange={medNameInput.onSelectionChange}
+            selection={medNameInput.selection}
             placeholder="e.g. Amoxicillin"
             placeholderTextColor="#bbb"
             autoCapitalize="words"
           />
 
-          <Text style={styles.fieldLabel}>Dosage</Text>
+          <View style={styles.fieldHeader}>
+            <Text style={styles.fieldLabel}>Dosage</Text>
+            <GestureTriggerButton onPress={medDosageInput.openGestureInput} />
+          </View>
           <TextInput
+            ref={medDosageInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.dosage}
             onChangeText={v => setMedForm(f => ({ ...f, dosage: v }))}
+            onFocus={medDosageInput.onFocus}
+            onBlur={medDosageInput.onBlur}
+            onSelectionChange={medDosageInput.onSelectionChange}
+            selection={medDosageInput.selection}
             placeholder="e.g. 500mg"
             placeholderTextColor="#bbb"
           />
 
-          <Text style={styles.fieldLabel}>Frequency</Text>
+          <View style={styles.fieldHeader}>
+            <Text style={styles.fieldLabel}>Frequency</Text>
+            <GestureTriggerButton onPress={medFrequencyInput.openGestureInput} />
+          </View>
           <TextInput
+            ref={medFrequencyInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.frequency}
             onChangeText={v => setMedForm(f => ({ ...f, frequency: v }))}
+            onFocus={medFrequencyInput.onFocus}
+            onBlur={medFrequencyInput.onBlur}
+            onSelectionChange={medFrequencyInput.onSelectionChange}
+            selection={medFrequencyInput.selection}
             placeholder="e.g. Twice daily"
             placeholderTextColor="#bbb"
           />
 
-          <Text style={styles.fieldLabel}>Duration</Text>
+          <View style={styles.fieldHeader}>
+            <Text style={styles.fieldLabel}>Duration</Text>
+            <GestureTriggerButton onPress={medDurationInput.openGestureInput} />
+          </View>
           <TextInput
+            ref={medDurationInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.duration}
             onChangeText={v => setMedForm(f => ({ ...f, duration: v }))}
+            onFocus={medDurationInput.onFocus}
+            onBlur={medDurationInput.onBlur}
+            onSelectionChange={medDurationInput.onSelectionChange}
+            selection={medDurationInput.selection}
             placeholder="e.g. 7 days"
             placeholderTextColor="#bbb"
           />
@@ -495,11 +588,19 @@ export default function PatientDetailScreen({ route }) {
             ))}
           </View>
 
-          <Text style={styles.fieldLabel}>Instructions</Text>
+          <View style={styles.fieldHeader}>
+            <Text style={styles.fieldLabel}>Instructions</Text>
+            <GestureTriggerButton onPress={medInstructionsInput.openGestureInput} />
+          </View>
           <TextInput
+            ref={medInstructionsInput.ref}
             style={[styles.fieldInput, styles.fieldInputMultiline, { marginBottom: 24 }]}
             value={medForm.instructions}
             onChangeText={v => setMedForm(f => ({ ...f, instructions: v }))}
+            onFocus={medInstructionsInput.onFocus}
+            onBlur={medInstructionsInput.onBlur}
+            onSelectionChange={medInstructionsInput.onSelectionChange}
+            selection={medInstructionsInput.selection}
             placeholder="e.g. Take after meals"
             placeholderTextColor="#bbb"
             multiline
@@ -579,13 +680,19 @@ const styles = StyleSheet.create({
   fieldGroup: {
     marginBottom: 20,
   },
+  fieldHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 6,
   },
   fieldInput: {
     backgroundColor: '#fff',

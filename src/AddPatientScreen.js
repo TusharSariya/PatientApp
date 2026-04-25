@@ -11,12 +11,25 @@ import {
   Platform,
 } from 'react-native';
 import { addPatient } from './database';
+import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
+
+function FieldLabel({ children, onGesturePress }) {
+  return (
+    <View style={styles.labelRow}>
+      <Text style={styles.label}>{children}</Text>
+      <GestureTriggerButton onPress={onGesturePress} />
+    </View>
+  );
+}
 
 export default function AddPatientScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
+  const nameInput = useGestureTextInput({ label: 'Full Name', value: name, setValue: setName });
+  const phoneInput = useGestureTextInput({ label: 'Phone Number', value: phone, setValue: setPhone });
+  const addressInput = useGestureTextInput({ label: 'Address', value: address, setValue: setAddress });
 
   async function handleSave() {
     if (!name.trim() || !phone.trim() || !address.trim()) {
@@ -45,30 +58,45 @@ export default function AddPatientScreen() {
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>New Patient</Text>
 
-        <Text style={styles.label}>Full Name</Text>
+        <FieldLabel onGesturePress={nameInput.openGestureInput}>Full Name</FieldLabel>
         <TextInput
+          ref={nameInput.ref}
           style={styles.input}
           placeholder="e.g. John Smith"
           value={name}
           onChangeText={setName}
+          onFocus={nameInput.onFocus}
+          onBlur={nameInput.onBlur}
+          onSelectionChange={nameInput.onSelectionChange}
+          selection={nameInput.selection}
           autoCapitalize="words"
         />
 
-        <Text style={styles.label}>Phone Number</Text>
+        <FieldLabel onGesturePress={phoneInput.openGestureInput}>Phone Number</FieldLabel>
         <TextInput
+          ref={phoneInput.ref}
           style={styles.input}
           placeholder="e.g. 555-123-4567"
           value={phone}
           onChangeText={setPhone}
+          onFocus={phoneInput.onFocus}
+          onBlur={phoneInput.onBlur}
+          onSelectionChange={phoneInput.onSelectionChange}
+          selection={phoneInput.selection}
           keyboardType="phone-pad"
         />
 
-        <Text style={styles.label}>Address</Text>
+        <FieldLabel onGesturePress={addressInput.openGestureInput}>Address</FieldLabel>
         <TextInput
+          ref={addressInput.ref}
           style={[styles.input, styles.multiline]}
           placeholder="e.g. 123 Main St, City, State"
           value={address}
           onChangeText={setAddress}
+          onFocus={addressInput.onFocus}
+          onBlur={addressInput.onBlur}
+          onSelectionChange={addressInput.onSelectionChange}
+          selection={addressInput.selection}
           multiline
           numberOfLines={3}
         />
@@ -96,11 +124,17 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     color: '#1a1a2e',
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    gap: 12,
+  },
   label: {
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
-    marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

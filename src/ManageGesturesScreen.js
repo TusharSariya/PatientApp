@@ -15,6 +15,7 @@ import {
 
 import GesturePad from './GesturePad';
 import { addGesture, deleteGesture, getGestures } from './database';
+import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
 
 function BottomSheet({ visible, onClose, title, children, closeDisabled = false }) {
   function handleClose() {
@@ -66,12 +67,22 @@ const sheet = StyleSheet.create({
   },
 });
 
+function FieldHeader({ label, onGesturePress }) {
+  return (
+    <View style={styles.fieldHeader}>
+      <Text style={[styles.fieldLabel, styles.fieldHeaderLabel]}>{label}</Text>
+      <GestureTriggerButton onPress={onGesturePress} />
+    </View>
+  );
+}
+
 function AddSheet({ onSaved, onBusyChange }) {
   const [word, setWord] = useState('');
   const [data, setData] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [padResetKey, setPadResetKey] = useState(0);
+  const wordInput = useGestureTextInput({ label: 'Gesture Word', value: word, setValue: setWord });
 
   async function handleSave() {
     Keyboard.dismiss();
@@ -105,11 +116,16 @@ function AddSheet({ onSaved, onBusyChange }) {
       keyboardShouldPersistTaps="handled"
       scrollEnabled={!isDrawing}
     >
-      <Text style={styles.fieldLabel}>Word *</Text>
+      <FieldHeader label="Word *" onGesturePress={wordInput.openGestureInput} />
       <TextInput
+        ref={wordInput.ref}
         style={[styles.fieldInput, { marginBottom: 20 }]}
         value={word}
         onChangeText={setWord}
+        onFocus={wordInput.onFocus}
+        onBlur={wordInput.onBlur}
+        onSelectionChange={wordInput.onSelectionChange}
+        selection={wordInput.selection}
         placeholder="e.g. Cough"
         placeholderTextColor="#bbb"
         autoCapitalize="words"
@@ -314,6 +330,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 6,
+  },
+  fieldHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  fieldHeaderLabel: {
+    marginBottom: 0,
   },
   fieldInput: {
     backgroundColor: '#f8f9ff',

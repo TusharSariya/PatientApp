@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { searchPatients, getAllPatients } from './database';
+import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
 
 function PatientCard({ patient, onPress }) {
   return (
@@ -46,14 +47,25 @@ export default function SearchScreen({ navigation }) {
     load(text);
   }
 
+  const queryInput = useGestureTextInput({ label: 'Search', value: query, setValue: handleChange });
+
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Patients</Text>
+      <View style={styles.searchRow}>
+        <Text style={styles.searchLabel}>Search</Text>
+        <GestureTriggerButton onPress={queryInput.openGestureInput} />
+      </View>
       <TextInput
+        ref={queryInput.ref}
         style={styles.searchInput}
         placeholder="Search by name…"
         value={query}
         onChangeText={handleChange}
+        onFocus={queryInput.onFocus}
+        onBlur={queryInput.onBlur}
+        onSelectionChange={queryInput.onSelectionChange}
+        selection={queryInput.selection}
         clearButtonMode="while-editing"
         autoCapitalize="none"
       />
@@ -91,6 +103,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
     color: '#1a1a2e',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  searchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   searchInput: {
     borderWidth: 1,
