@@ -1,6 +1,6 @@
 # PatientApp — Patient Manager
 
-A React Native app (Expo) for managing patient records on-device. Stores name, phone number, and address using SQLite. Supports iOS and Android.
+A React Native app (Expo) for managing patient records on-device. Stores first, middle, and last names, plus phone number and address using SQLite. Supports iOS and Android.
 
 ---
 

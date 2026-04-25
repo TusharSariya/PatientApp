@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,59 +21,121 @@ function PatientCard({ patient, onPress }) {
   );
 }
 
+function SearchField({ label, value, onChangeText, input, placeholder }) {
+  return (
+    <View style={styles.fieldGroup}>
+      <View style={styles.searchRow}>
+        <Text style={styles.searchLabel}>{label}</Text>
+        <GestureTriggerButton onPress={input.openGestureInput} />
+      </View>
+      <TextInput
+        ref={input.ref}
+        style={styles.searchInput}
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={input.onFocus}
+        onBlur={input.onBlur}
+        onSelectionChange={input.onSelectionChange}
+        selection={input.selection}
+        clearButtonMode="while-editing"
+        autoCapitalize="words"
+      />
+    </View>
+  );
+}
+
 export default function SearchScreen({ navigation }) {
-  const [query, setQuery] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const latestLoadRef = useRef(0);
 
-  const load = useCallback(async (text) => {
+  const load = useCallback(async (filters) => {
+    const requestId = latestLoadRef.current + 1;
+    latestLoadRef.current = requestId;
     setLoading(true);
     try {
-      const results = text.trim()
-        ? await searchPatients(text.trim())
+      const normalized = {
+        firstName: filters.firstName.trim(),
+        middleName: filters.middleName.trim(),
+        lastName: filters.lastName.trim(),
+      };
+      const hasSearch =
+        normalized.firstName.length > 0 ||
+        normalized.middleName.length > 0 ||
+        normalized.lastName.length > 0;
+      const results = hasSearch
+        ? await searchPatients(normalized)
         : await getAllPatients();
-      setPatients(results);
+      if (latestLoadRef.current === requestId) {
+        setPatients(results);
+      }
     } finally {
-      setLoading(false);
+      if (latestLoadRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    load('');
+    load({ firstName: '', middleName: '', lastName: '' });
   }, [load]);
 
-  function handleChange(text) {
-    setQuery(text);
-    load(text);
+  function handleFirstNameChange(text) {
+    setFirstName(text);
+    load({ firstName: text, middleName, lastName });
   }
 
-  const queryInput = useGestureTextInput({ label: 'Search', value: query, setValue: handleChange });
+  function handleMiddleNameChange(text) {
+    setMiddleName(text);
+    load({ firstName, middleName: text, lastName });
+  }
+
+  function handleLastNameChange(text) {
+    setLastName(text);
+    load({ firstName, middleName, lastName: text });
+  }
+
+  const firstNameInput = useGestureTextInput({ label: 'Search First Name', value: firstName, setValue: handleFirstNameChange });
+  const middleNameInput = useGestureTextInput({ label: 'Search Middle Name', value: middleName, setValue: handleMiddleNameChange });
+  const lastNameInput = useGestureTextInput({ label: 'Search Last Name', value: lastName, setValue: handleLastNameChange });
+  const hasSearch = firstName.trim() || middleName.trim() || lastName.trim();
 
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Patients</Text>
-      <View style={styles.searchRow}>
-        <Text style={styles.searchLabel}>Search</Text>
-        <GestureTriggerButton onPress={queryInput.openGestureInput} />
-      </View>
-      <TextInput
-        ref={queryInput.ref}
-        style={styles.searchInput}
-        placeholder="Search by name…"
-        value={query}
-        onChangeText={handleChange}
-        onFocus={queryInput.onFocus}
-        onBlur={queryInput.onBlur}
-        onSelectionChange={queryInput.onSelectionChange}
-        selection={queryInput.selection}
-        clearButtonMode="while-editing"
-        autoCapitalize="none"
+      <Text style={styles.subhead}>Use first, middle, and last name prefixes to narrow to the exact patient.</Text>
+
+      <SearchField
+        label="First Name"
+        value={firstName}
+        onChangeText={handleFirstNameChange}
+        input={firstNameInput}
+        placeholder="Prefix, e.g. Jo"
       />
+      <SearchField
+        label="Middle Name"
+        value={middleName}
+        onChangeText={handleMiddleNameChange}
+        input={middleNameInput}
+        placeholder="Optional prefix"
+      />
+      <SearchField
+        label="Last Name"
+        value={lastName}
+        onChangeText={handleLastNameChange}
+        input={lastNameInput}
+        placeholder="Prefix, e.g. Sm"
+      />
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#4f6ef7" />
       ) : patients.length === 0 ? (
         <Text style={styles.empty}>
-          {query.trim() ? 'No patients found.' : 'No patients yet. Add one!'}
+          {hasSearch ? 'No patients match those name prefixes.' : 'No patients yet. Add one!'}
         </Text>
       ) : (
         <FlatList
@@ -101,8 +163,17 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 26,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: 8,
     color: '#1a1a2e',
+  },
+  subhead: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#61708a',
+    marginBottom: 18,
+  },
+  fieldGroup: {
+    marginBottom: 14,
   },
   searchRow: {
     flexDirection: 'row',
@@ -126,7 +197,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     backgroundColor: '#fff',
-    marginBottom: 16,
     color: '#1a1a2e',
   },
   empty: {
