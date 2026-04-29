@@ -17,6 +17,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
+import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import { useGestureTextInput } from './GestureInputProvider';
 
 function clamp(value, min, max) {
@@ -139,6 +140,7 @@ export default function PatientDetailScreen({ route, navigation }) {
   const shouldAdvanceRef = useRef(false);
   const lastTranscriptRef = useRef('');
   const fabBottom = useRef(new Animated.Value(32)).current;
+  const dictationOwner = 'patient-detail';
 
   React.useEffect(() => {
     const show = Keyboard.addListener(
@@ -180,10 +182,13 @@ export default function PatientDetailScreen({ route, navigation }) {
   const currentFields = activeTab === 'Personal' ? personalFields : rxFields;
 
   useSpeechRecognitionEvent('start', () => {
+    if (getDictationOwner() !== dictationOwner) return;
     lastTranscriptRef.current = '';
     setRecognizing(true);
   });
   useSpeechRecognitionEvent('end', () => {
+    if (getDictationOwner() !== dictationOwner) return;
+    clearDictationOwner(dictationOwner);
     lastTranscriptRef.current = '';
     setRecognizing(false);
     if (shouldAdvanceRef.current) {
@@ -194,6 +199,7 @@ export default function PatientDetailScreen({ route, navigation }) {
     }
   });
   useSpeechRecognitionEvent('result', (event) => {
+    if (getDictationOwner() !== dictationOwner) return;
     const text = (event.results[0]?.transcript ?? '').trim();
     const field = currentFields[activeIndexRef.current];
     if (!text || !field) return;
@@ -211,6 +217,8 @@ export default function PatientDetailScreen({ route, navigation }) {
     field.input.setSelection?.({ start: next.cursor, end: next.cursor });
   });
   useSpeechRecognitionEvent('error', (event) => {
+    if (getDictationOwner() !== dictationOwner) return;
+    clearDictationOwner(dictationOwner);
     Alert.alert('Dictation error', event.message ?? 'Something went wrong.');
     setRecognizing(false);
   });
@@ -235,6 +243,7 @@ export default function PatientDetailScreen({ route, navigation }) {
       Alert.alert('Permission required', 'Microphone access is needed for dictation.');
       return;
     }
+    setDictationOwner(dictationOwner);
     ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true });
   }
 

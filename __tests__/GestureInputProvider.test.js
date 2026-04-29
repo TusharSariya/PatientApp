@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import {
   GestureInputProvider,
@@ -8,6 +8,11 @@ import {
 } from '../src/GestureInputProvider';
 import { getGestures } from '../src/database';
 import { isTouchGestureData, matchGesture } from '../src/gestureRecognizer';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
+import { clearDictationOwner } from '../src/dictationOwner';
 
 jest.mock('../src/database', () => ({
   getGestures: jest.fn(),
@@ -16,6 +21,15 @@ jest.mock('../src/database', () => ({
 jest.mock('../src/gestureRecognizer', () => ({
   isTouchGestureData: jest.fn(),
   matchGesture: jest.fn(),
+}));
+
+jest.mock('expo-speech-recognition', () => ({
+  ExpoSpeechRecognitionModule: {
+    requestPermissionsAsync: jest.fn(),
+    start: jest.fn(),
+    stop: jest.fn(),
+  },
+  useSpeechRecognitionEvent: jest.fn(),
 }));
 
 jest.mock('../src/GesturePad', () => {
@@ -96,8 +110,14 @@ function Harness({ initialValue = 'Symptoms' }) {
 }
 
 describe('GestureInputProvider', () => {
+  const speechHandlers = {};
+
   beforeEach(() => {
+    clearDictationOwner();
     jest.clearAllMocks();
+    Object.keys(speechHandlers).forEach((key) => {
+      delete speechHandlers[key];
+    });
 
     getGestures.mockResolvedValue([
       { id: 1, word: 'cold', data: 'cold-gesture' },
@@ -109,6 +129,10 @@ describe('GestureInputProvider', () => {
       if (gesture?.type === 'fever') return { word: 'fever' };
       return null;
     });
+    useSpeechRecognitionEvent.mockImplementation((eventName, handler) => {
+      speechHandlers[eventName] = handler;
+    });
+    ExpoSpeechRecognitionModule.requestPermissionsAsync.mockResolvedValue({ granted: true });
   });
 
   function renderHarness(initialValue) {
@@ -158,6 +182,36 @@ describe('GestureInputProvider', () => {
     });
     expect(screen.getByText(/"cold" inserted/)).toBeTruthy();
     expect(screen.getByText('Gesture Input')).toBeTruthy();
+  });
+
+  test('dictation appends words into live field preview', async () => {
+    renderHarness('Symptoms');
+    await openGestureSheet();
+
+    fireEvent.press(screen.getByText('Dictation'));
+    await waitFor(() => {
+      expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledWith({ lang: 'en-US', interimResults: true });
+    });
+
+    act(() => {
+      speechHandlers.start?.();
+      speechHandlers.result?.({ results: [{ transcript: 'fever' }] });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms fever');
+    });
+    act(() => {
+      speechHandlers.result?.({ results: [{ transcript: 'fever and cough' }] });
+    });
+
+    expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms fever and cough');
+    expect(screen.getByText('Stop Dictation')).toBeTruthy();
+
+    act(() => {
+      speechHandlers.end?.();
+    });
+
+    expect(screen.getByText('Dictation')).toBeTruthy();
   });
 
   test('undo gesture restores previous field value', async () => {

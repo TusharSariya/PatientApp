@@ -1,8 +1,9 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import PatientDetailScreen from '../src/PatientDetailScreen';
 import { useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { clearDictationOwner } from '../src/dictationOwner';
 
 jest.mock('../src/database', () => ({
   getGestures: jest.fn().mockResolvedValue([]),
@@ -21,6 +22,7 @@ describe('PatientDetailScreen', () => {
   const speechHandlers = {};
 
   beforeEach(() => {
+    clearDictationOwner();
     Object.keys(speechHandlers).forEach((key) => {
       delete speechHandlers[key];
     });
@@ -47,7 +49,7 @@ describe('PatientDetailScreen', () => {
     expect(screen.queryByText('No medicines added yet.')).toBeNull();
   });
 
-  test('dictation inserts into existing field text instead of overwriting', () => {
+  test('dictation inserts into existing field text instead of overwriting', async () => {
     const patient = {
       id: 5,
       name: 'Alice Johnson',
@@ -60,6 +62,8 @@ describe('PatientDetailScreen', () => {
     const notesInput = screen.getByPlaceholderText('—');
     fireEvent.changeText(notesInput, 'existing');
     fireEvent(notesInput, 'selectionChange', { nativeEvent: { selection: { start: 8, end: 8 } } });
+    fireEvent.press(screen.getByText('🎙'));
+    await waitFor(() => expect(speechHandlers.start).toBeTruthy());
 
     act(() => {
       speechHandlers.start?.();

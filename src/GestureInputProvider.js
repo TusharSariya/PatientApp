@@ -11,8 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 
 import { getGestures } from './database';
+import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import GesturePad from './GesturePad';
 import { isTouchGestureData, matchGesture } from './gestureRecognizer';
 
@@ -120,6 +125,7 @@ export function GestureInputProvider({ children }) {
   const [canUndo, setCanUndo] = useState(false);
   const [lastInsertion, setLastInsertion] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isDictating, setIsDictating] = useState(false);
 
   const activeFieldRef = useRef(null);
   const overlayVisibleRef = useRef(false);
@@ -127,6 +133,9 @@ export function GestureInputProvider({ children }) {
   const historyRef = useRef([]);
   const sheetTranslateY = useRef(new Animated.Value(0)).current;
   const swipeStartYRef = useRef(null);
+  const dictationSessionRef = useRef(false);
+  const lastDictationTranscriptRef = useRef('');
+  const dictationOwner = 'gesture-overlay';
 
   useEffect(() => {
     activeFieldRef.current = activeField;
@@ -185,6 +194,18 @@ export function GestureInputProvider({ children }) {
     setLastInsertion(null);
   }
 
+  function clearDictationSession() {
+    dictationSessionRef.current = false;
+    lastDictationTranscriptRef.current = '';
+    setIsDictating(false);
+    clearDictationOwner(dictationOwner);
+  }
+
+  function stopOverlayDictation() {
+    if (!dictationSessionRef.current) return;
+    ExpoSpeechRecognitionModule.stop();
+  }
+
   function focusField(field) {
     clearBlurTimer();
     setActiveField(field);
@@ -202,6 +223,8 @@ export function GestureInputProvider({ children }) {
     clearBlurTimer();
     setActiveField(current => (current?.id === fieldId ? null : current));
     if (activeFieldRef.current?.id === fieldId && overlayVisibleRef.current) {
+      stopOverlayDictation();
+      clearDictationSession();
       sheetTranslateY.setValue(0);
       setOverlayVisible(false);
       setResultState('idle');
@@ -237,6 +260,8 @@ export function GestureInputProvider({ children }) {
   }
 
   function closeOverlay({ blurField = true } = {}) {
+    stopOverlayDictation();
+    clearDictationSession();
     sheetTranslateY.setValue(0);
     setOverlayVisible(false);
     resetOverlayState();
@@ -261,6 +286,8 @@ export function GestureInputProvider({ children }) {
     }
 
     clearBlurTimer();
+    stopOverlayDictation();
+    clearDictationSession();
     field.armKeyboardFocus?.();
     sheetTranslateY.setValue(0);
     setOverlayVisible(false);
@@ -383,6 +410,62 @@ export function GestureInputProvider({ children }) {
     setResultState('inserted');
     setPadResetKey(previous => previous + 1);
   }
+
+  async function handleDictationPress() {
+    if (isDictating) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+
+    const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
+      setResultState('invalid');
+      setLastMatchedWord('');
+      return;
+    }
+
+    setDictationOwner(dictationOwner);
+    dictationSessionRef.current = true;
+    lastDictationTranscriptRef.current = '';
+    setResultState('ready');
+    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true });
+  }
+
+  useSpeechRecognitionEvent('start', () => {
+    if (getDictationOwner() !== dictationOwner || !dictationSessionRef.current) return;
+    setIsDictating(true);
+    setResultState('ready');
+  });
+
+  useSpeechRecognitionEvent('result', (event) => {
+    if (getDictationOwner() !== dictationOwner || !dictationSessionRef.current) return;
+    const transcript = (event.results[0]?.transcript ?? '').trim();
+    if (!transcript) return;
+    if (transcript === lastDictationTranscriptRef.current) return;
+
+    let chunk = transcript;
+    if (transcript.startsWith(lastDictationTranscriptRef.current)) {
+      chunk = transcript.slice(lastDictationTranscriptRef.current.length).trimStart();
+    }
+    lastDictationTranscriptRef.current = transcript;
+    if (!chunk) return;
+
+    const inserted = insertMatchedWord(chunk);
+    if (!inserted) return;
+    setLastMatchedWord(inserted.insertedWord);
+    setResultState('inserted');
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    if (getDictationOwner() !== dictationOwner || !dictationSessionRef.current) return;
+    clearDictationSession();
+  });
+
+  useSpeechRecognitionEvent('error', () => {
+    if (getDictationOwner() !== dictationOwner || !dictationSessionRef.current) return;
+    clearDictationSession();
+    setResultState('invalid');
+  });
 
   function resetSheetPosition() {
     Animated.spring(sheetTranslateY, {
@@ -534,6 +617,9 @@ export function GestureInputProvider({ children }) {
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.secondaryButton} onPress={handleInvertGesture} disabled={!lastInsertion}>
                       <Text style={[styles.secondaryButtonText, !lastInsertion && styles.buttonTextDisabled]}>Invert Gesture</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.secondaryButton} onPress={handleDictationPress}>
+                      <Text style={styles.secondaryButtonText}>{isDictating ? 'Stop Dictation' : 'Dictation'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.primaryButton} onPress={switchToKeyboard}>
                       <Text style={styles.primaryButtonText}>Use Keyboard</Text>
