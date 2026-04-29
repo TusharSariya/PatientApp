@@ -34,6 +34,18 @@ function clampSelection(selection, text) {
   };
 }
 
+function cloneSelection(selection, text) {
+  const safe = clampSelection(selection, text);
+  return { start: safe.start, end: safe.end };
+}
+
+function clampRange(range, text) {
+  const length = text?.length ?? 0;
+  const start = Math.max(0, Math.min(range?.start ?? 0, length));
+  const end = Math.max(start, Math.min(range?.end ?? start, length));
+  return { start, end };
+}
+
 function insertWordAtSelection(text, word, selection) {
   const safeText = text ?? '';
   const safeSelection = clampSelection(selection, safeText);
@@ -44,11 +56,54 @@ function insertWordAtSelection(text, word, selection) {
   const token = `${needsLeadingSpace ? ' ' : ''}${word}${needsTrailingSpace ? ' ' : ''}`;
   const nextText = `${before}${token}${after}`;
   const cursor = before.length + token.length;
+  const insertedWordStart = before.length + (needsLeadingSpace ? 1 : 0);
+  const insertedWordEnd = insertedWordStart + word.length;
 
   return {
     text: nextText,
     selection: { start: cursor, end: cursor },
+    insertedWord: word,
+    insertedWordRange: { start: insertedWordStart, end: insertedWordEnd },
   };
+}
+
+function replaceTextRange(text, range, replacement) {
+  const safeText = text ?? '';
+  const safeRange = clampRange(range, safeText);
+  const before = safeText.slice(0, safeRange.start);
+  const after = safeText.slice(safeRange.end);
+  const nextText = `${before}${replacement}${after}`;
+  const replacedLength = safeRange.end - safeRange.start;
+  const delta = replacement.length - replacedLength;
+
+  return {
+    text: nextText,
+    range: { start: safeRange.start, end: safeRange.start + replacement.length },
+    delta,
+  };
+}
+
+function shiftSelectionAfterReplace(selection, range, delta, replacementLength) {
+  const safeSelection = selection ?? { start: 0, end: 0 };
+
+  function shiftPoint(point) {
+    if (point <= range.start) return point;
+    if (point >= range.end) return point + delta;
+    return range.start + replacementLength;
+  }
+
+  const start = shiftPoint(safeSelection.start);
+  const end = shiftPoint(safeSelection.end);
+  return { start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+function invertPhrase(phrase) {
+  const trimmed = (phrase ?? '').trim();
+  if (!trimmed) return '';
+  if (/^no\s+/i.test(trimmed)) {
+    return trimmed.replace(/^no\s+/i, '');
+  }
+  return `no ${trimmed}`;
 }
 
 export function GestureInputProvider({ children }) {
@@ -59,11 +114,15 @@ export function GestureInputProvider({ children }) {
   const [padResetKey, setPadResetKey] = useState(0);
   const [resultState, setResultState] = useState('idle');
   const [lastMatchedWord, setLastMatchedWord] = useState('');
+  const [fieldPreviewText, setFieldPreviewText] = useState('');
+  const [canUndo, setCanUndo] = useState(false);
+  const [lastInsertion, setLastInsertion] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
   const activeFieldRef = useRef(null);
   const overlayVisibleRef = useRef(false);
   const blurTimeoutRef = useRef(null);
+  const historyRef = useRef([]);
 
   useEffect(() => {
     activeFieldRef.current = activeField;
@@ -72,6 +131,11 @@ export function GestureInputProvider({ children }) {
   useEffect(() => {
     overlayVisibleRef.current = overlayVisible;
   }, [overlayVisible]);
+
+  useEffect(() => {
+    if (!overlayVisible) return;
+    setFieldPreviewText(activeField?.getValue?.() ?? '');
+  }, [overlayVisible, activeField]);
 
   useEffect(() => {
     return () => {
@@ -111,6 +175,12 @@ export function GestureInputProvider({ children }) {
     }
   }
 
+  function resetGestureHistory() {
+    historyRef.current = [];
+    setCanUndo(false);
+    setLastInsertion(null);
+  }
+
   function focusField(field) {
     clearBlurTimer();
     setActiveField(field);
@@ -130,8 +200,11 @@ export function GestureInputProvider({ children }) {
     if (activeFieldRef.current?.id === fieldId && overlayVisibleRef.current) {
       setOverlayVisible(false);
       setResultState('idle');
+      setLastMatchedWord('');
       setIsDrawing(false);
+      setFieldPreviewText('');
       setPadResetKey(previous => previous + 1);
+      resetGestureHistory();
     }
   }
 
@@ -143,7 +216,9 @@ export function GestureInputProvider({ children }) {
     setPadResetKey(previous => previous + 1);
     setResultState('idle');
     setLastMatchedWord('');
+    setFieldPreviewText(field.getValue?.() ?? '');
     setIsDrawing(false);
+    resetGestureHistory();
     setOverlayVisible(true);
     Keyboard.dismiss();
   }
@@ -158,6 +233,8 @@ export function GestureInputProvider({ children }) {
   function closeOverlay({ blurField = true } = {}) {
     setOverlayVisible(false);
     resetOverlayState();
+    setFieldPreviewText('');
+    resetGestureHistory();
 
     if (blurField) {
       const field = activeFieldRef.current;
@@ -180,6 +257,8 @@ export function GestureInputProvider({ children }) {
     field.armKeyboardFocus?.();
     setOverlayVisible(false);
     resetOverlayState();
+    setFieldPreviewText('');
+    resetGestureHistory();
 
     field.blur?.();
     setTimeout(() => {
@@ -189,19 +268,89 @@ export function GestureInputProvider({ children }) {
 
   function insertMatchedWord(word) {
     const field = activeFieldRef.current;
-    if (!field) return;
+    if (!field) return null;
 
     const currentValue = field.getValue?.() ?? '';
-    const currentSelection = field.getSelection?.() ?? getDefaultSelection(currentValue);
+    const currentSelection = cloneSelection(
+      field.getSelection?.() ?? getDefaultSelection(currentValue),
+      currentValue
+    );
     const next = insertWordAtSelection(currentValue, word, currentSelection);
 
     field.setValue?.(next.text);
     field.setSelection?.(next.selection);
+
+    historyRef.current.push({
+      beforeText: currentValue,
+      beforeSelection: currentSelection,
+      lastInsertionBefore: lastInsertion,
+      lastInsertionAfter: { word: next.insertedWord, range: next.insertedWordRange },
+    });
+
+    setCanUndo(historyRef.current.length > 0);
+    setLastInsertion({ word: next.insertedWord, range: next.insertedWordRange });
+    setFieldPreviewText(next.text);
+    return next;
+  }
+
+  function handleUndoGesture() {
+    const field = activeFieldRef.current;
+    if (!field || historyRef.current.length === 0) return;
+
+    const previous = historyRef.current.pop();
+    field.setValue?.(previous.beforeText);
+    field.setSelection?.(previous.beforeSelection);
+
+    setCanUndo(historyRef.current.length > 0);
+    setLastInsertion(previous.lastInsertionBefore ?? null);
+    setLastMatchedWord('');
+    setResultState('ready');
+    setFieldPreviewText(previous.beforeText);
+    setPadResetKey(previousKey => previousKey + 1);
+  }
+
+  function handleInvertGesture() {
+    const field = activeFieldRef.current;
+    if (!field || !lastInsertion?.range) return;
+
+    const currentValue = field.getValue?.() ?? '';
+    const currentSelection = cloneSelection(
+      field.getSelection?.() ?? getDefaultSelection(currentValue),
+      currentValue
+    );
+    const range = clampRange(lastInsertion.range, currentValue);
+    const phrase = currentValue.slice(range.start, range.end);
+    const inverted = invertPhrase(phrase);
+    if (!inverted || inverted === phrase) return;
+
+    const replaced = replaceTextRange(currentValue, range, inverted);
+    const nextSelection = shiftSelectionAfterReplace(
+      currentSelection,
+      range,
+      replaced.delta,
+      inverted.length
+    );
+
+    field.setValue?.(replaced.text);
+    field.setSelection?.(nextSelection);
+
+    historyRef.current.push({
+      beforeText: currentValue,
+      beforeSelection: currentSelection,
+      lastInsertionBefore: lastInsertion,
+      lastInsertionAfter: { word: inverted, range: replaced.range },
+    });
+
+    setCanUndo(historyRef.current.length > 0);
+    setLastInsertion({ word: inverted, range: replaced.range });
+    setLastMatchedWord(inverted);
+    setResultState('inverted');
+    setFieldPreviewText(replaced.text);
   }
 
   function handleDrawingChange(drawing) {
     setIsDrawing(drawing);
-    if (drawing) setResultState('idle');
+    if (drawing) setResultState('ready');
   }
 
   function handleGestureComplete(gesture) {
@@ -220,9 +369,10 @@ export function GestureInputProvider({ children }) {
       return;
     }
 
-    insertMatchedWord(match.word);
-    setLastMatchedWord(match.word);
-    setResultState('matched');
+    const inserted = insertMatchedWord(match.word);
+    if (!inserted) return;
+    setLastMatchedWord(inserted.insertedWord);
+    setResultState('inserted');
     setPadResetKey(previous => previous + 1);
   }
 
@@ -258,6 +408,13 @@ export function GestureInputProvider({ children }) {
                       : 'No touch gestures are available yet. Add them in Manage Gestures first.'}
                   </Text>
 
+                  <View style={styles.previewPanel}>
+                    <Text style={styles.previewLabel}>Live Field Preview</Text>
+                    <Text style={styles.previewText}>
+                      {fieldPreviewText || 'Nothing inserted yet.'}
+                    </Text>
+                  </View>
+
                   <GesturePad
                     disabled={!hasGestures}
                     resetKey={padResetKey}
@@ -268,7 +425,7 @@ export function GestureInputProvider({ children }) {
                   <View
                     style={[
                       styles.resultPanel,
-                      resultState === 'matched' && styles.resultSuccess,
+                      (resultState === 'inserted' || resultState === 'inverted') && styles.resultSuccess,
                       resultState === 'no-match' && styles.resultWarn,
                       resultState === 'invalid' && styles.resultWarn,
                     ]}
@@ -276,28 +433,32 @@ export function GestureInputProvider({ children }) {
                     <Text
                       style={[
                         styles.resultLabel,
-                        resultState === 'matched' && styles.resultLabelSuccess,
+                        (resultState === 'inserted' || resultState === 'inverted') && styles.resultLabelSuccess,
                         (resultState === 'no-match' || resultState === 'invalid') && styles.resultLabelWarn,
                       ]}
                     >
                       {isDrawing
                         ? 'Drawing'
-                        : resultState === 'matched'
+                        : resultState === 'inserted'
                           ? 'Inserted'
+                        : resultState === 'inverted'
+                          ? 'Inverted'
                         : resultState === 'no-match'
                           ? 'No Matching Gesture'
-                          : resultState === 'invalid'
+                        : resultState === 'invalid'
                             ? 'Gesture Too Small'
                             : 'Ready'}
                     </Text>
                     <Text style={styles.resultText}>
                       {isDrawing
                         ? 'Lift your fingers to finish.'
-                        : resultState === 'matched'
+                        : resultState === 'inserted'
                           ? `"${lastMatchedWord}" inserted. Draw the next gesture or close when done.`
+                        : resultState === 'inverted'
+                          ? `"${lastMatchedWord}" applied.`
                         : resultState === 'no-match'
                           ? 'Try again with a more consistent gesture.'
-                          : resultState === 'invalid'
+                        : resultState === 'invalid'
                             ? 'Draw a larger gesture before lifting your fingers.'
                             : hasGestures
                               ? 'Open gesture mode only when you want to insert a saved word.'
@@ -305,12 +466,18 @@ export function GestureInputProvider({ children }) {
                     </Text>
                   </View>
 
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={clearResult}>
-                      <Text style={styles.secondaryButtonText}>Clear</Text>
+                  <View style={styles.actionGrid}>
+                    <TouchableOpacity style={styles.secondaryButton} onPress={handleUndoGesture} disabled={!canUndo}>
+                      <Text style={[styles.secondaryButtonText, !canUndo && styles.buttonTextDisabled]}>Undo Gesture</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.secondaryButton} onPress={handleInvertGesture} disabled={!lastInsertion}>
+                      <Text style={[styles.secondaryButtonText, !lastInsertion && styles.buttonTextDisabled]}>Invert Gesture</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.primaryButton} onPress={switchToKeyboard}>
                       <Text style={styles.primaryButtonText}>Use Keyboard</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.secondaryButton} onPress={clearResult}>
+                      <Text style={styles.secondaryButtonText}>Clear Pad</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -480,7 +647,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: '#61708a',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  previewPanel: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dce3ff',
+    backgroundColor: '#f7f9ff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  previewLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    color: '#627194',
+    marginBottom: 6,
+  },
+  previewText: {
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#1a1a2e',
   },
   resultPanel: {
     minHeight: 108,
@@ -518,13 +707,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
-  actionRow: {
+  actionGrid: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
+    columnGap: 12,
     marginTop: 16,
   },
   secondaryButton: {
-    flex: 1,
+    width: '48%',
     borderRadius: 12,
     backgroundColor: '#edf1ff',
     paddingVertical: 14,
@@ -536,7 +728,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   primaryButton: {
-    flex: 1,
+    width: '48%',
     borderRadius: 12,
     backgroundColor: '#4f6ef7',
     paddingVertical: 14,
@@ -546,6 +738,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  buttonTextDisabled: {
+    color: '#9facdb',
   },
   gestureTrigger: {
     borderWidth: 1,
