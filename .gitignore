@@ -26,6 +26,9 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# test output
+coverage/
+
 # APK builds (uploaded to GitHub releases, not committed)
 *.apk
 
