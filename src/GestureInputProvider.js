@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Keyboard,
   Modal,
   Platform,
@@ -18,6 +19,7 @@ import { isTouchGestureData, matchGesture } from './gestureRecognizer';
 const GestureInputContext = createContext(null);
 
 let nextFieldId = 1;
+const SWIPE_CLOSE_DISTANCE = 92;
 
 function getDefaultSelection(text) {
   const position = text?.length ?? 0;
@@ -123,6 +125,8 @@ export function GestureInputProvider({ children }) {
   const overlayVisibleRef = useRef(false);
   const blurTimeoutRef = useRef(null);
   const historyRef = useRef([]);
+  const sheetTranslateY = useRef(new Animated.Value(0)).current;
+  const swipeStartYRef = useRef(null);
 
   useEffect(() => {
     activeFieldRef.current = activeField;
@@ -198,6 +202,7 @@ export function GestureInputProvider({ children }) {
     clearBlurTimer();
     setActiveField(current => (current?.id === fieldId ? null : current));
     if (activeFieldRef.current?.id === fieldId && overlayVisibleRef.current) {
+      sheetTranslateY.setValue(0);
       setOverlayVisible(false);
       setResultState('idle');
       setLastMatchedWord('');
@@ -219,6 +224,7 @@ export function GestureInputProvider({ children }) {
     setFieldPreviewText(field.getValue?.() ?? '');
     setIsDrawing(false);
     resetGestureHistory();
+    sheetTranslateY.setValue(0);
     setOverlayVisible(true);
     Keyboard.dismiss();
   }
@@ -231,6 +237,7 @@ export function GestureInputProvider({ children }) {
   }
 
   function closeOverlay({ blurField = true } = {}) {
+    sheetTranslateY.setValue(0);
     setOverlayVisible(false);
     resetOverlayState();
     setFieldPreviewText('');
@@ -255,6 +262,7 @@ export function GestureInputProvider({ children }) {
 
     clearBlurTimer();
     field.armKeyboardFocus?.();
+    sheetTranslateY.setValue(0);
     setOverlayVisible(false);
     resetOverlayState();
     setFieldPreviewText('');
@@ -376,6 +384,49 @@ export function GestureInputProvider({ children }) {
     setPadResetKey(previous => previous + 1);
   }
 
+  function resetSheetPosition() {
+    Animated.spring(sheetTranslateY, {
+      toValue: 0,
+      speed: 26,
+      bounciness: 0,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  function getTouchY(event) {
+    const pageY = event?.nativeEvent?.pageY;
+    if (typeof pageY === 'number') return pageY;
+    const locationY = event?.nativeEvent?.locationY;
+    if (typeof locationY === 'number') return locationY;
+    return 0;
+  }
+
+  function handleSheetGestureStart(event) {
+    swipeStartYRef.current = getTouchY(event);
+    sheetTranslateY.stopAnimation();
+  }
+
+  function handleSheetGestureMove(event) {
+    const startY = swipeStartYRef.current ?? getTouchY(event);
+    const currentY = getTouchY(event);
+    const deltaY = Math.max(0, currentY - startY);
+    sheetTranslateY.setValue(deltaY);
+  }
+
+  function handleSheetGestureFinish(event) {
+    const startY = swipeStartYRef.current;
+    const currentY = getTouchY(event);
+    const deltaY = startY == null ? 0 : Math.max(0, currentY - startY);
+    swipeStartYRef.current = null;
+
+    if (deltaY > SWIPE_CLOSE_DISTANCE) {
+      closeOverlay();
+      return;
+    }
+
+    resetSheetPosition();
+  }
+
   const hasGestures = gestures.length > 0;
 
   return (
@@ -386,8 +437,19 @@ export function GestureInputProvider({ children }) {
         <Modal visible={overlayVisible} transparent animationType="slide" onRequestClose={() => closeOverlay()}>
           <View style={styles.overlay}>
             <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeOverlay()} />
-            <View style={styles.sheet}>
-              <View style={styles.handle} />
+            <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+              <View
+                testID="gesture-sheet-drag-handle"
+                style={styles.handleTouchTarget}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onResponderGrant={handleSheetGestureStart}
+                onResponderMove={handleSheetGestureMove}
+                onResponderRelease={handleSheetGestureFinish}
+                onResponderTerminate={handleSheetGestureFinish}
+              >
+                <View style={styles.handle} />
+              </View>
               <View style={styles.header}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.eyebrow}>Gesture Input</Text>
@@ -482,7 +544,7 @@ export function GestureInputProvider({ children }) {
                   </View>
                 </>
               )}
-            </View>
+            </Animated.View>
           </View>
         </Modal>
       </View>
@@ -600,7 +662,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#ddd',
     alignSelf: 'center',
-    marginBottom: 18,
+    marginBottom: 6,
+  },
+  handleTouchTarget: {
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 10,
+    marginBottom: 8,
   },
   header: {
     flexDirection: 'row',

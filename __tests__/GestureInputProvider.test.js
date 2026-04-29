@@ -133,6 +133,20 @@ describe('GestureInputProvider', () => {
     expect(screen.getAllByText('Symptoms').length).toBeGreaterThan(0);
   });
 
+  test('closes gesture sheet on swipe down', async () => {
+    renderHarness('Symptoms');
+    await openGestureSheet();
+
+    const dragHandle = screen.getByTestId('gesture-sheet-drag-handle');
+    fireEvent(dragHandle, 'responderGrant', { nativeEvent: { pageY: 0 } });
+    fireEvent(dragHandle, 'responderMove', { nativeEvent: { pageY: 140 } });
+    fireEvent(dragHandle, 'responderRelease', { nativeEvent: { pageY: 140 } });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Gesture Input')).toBeNull();
+    });
+  });
+
   test('streams matched gestures into active field while sheet stays open', async () => {
     renderHarness('Symptoms');
     await openGestureSheet();

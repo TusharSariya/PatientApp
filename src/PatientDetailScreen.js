@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,100 +12,18 @@ import {
   Alert,
   Keyboard,
   Animated,
-  Modal,
 } from 'react-native';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { getMedicines, addMedicine, deleteMedicine } from './database';
 import { useGestureTextInput } from './GestureInputProvider';
-
-const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-
-const EMPTY_FORM = { name: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' };
 
 function composeHandlers(...handlers) {
   return (...args) => {
     handlers.forEach(handler => handler?.(...args));
   };
 }
-
-function BottomSheet({ visible, onClose, title, children }) {
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={sheet.overlay}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
-        <View style={sheet.container}>
-          <View style={sheet.handle} />
-          {title ? <Text style={sheet.title}>{title}</Text> : null}
-          {children}
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const sheet = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  container: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    maxHeight: '88%',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#ddd',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a2e',
-    marginBottom: 20,
-  },
-});
-
-function MedicineCard({ medicine, onPress }) {
-  const sub = [medicine.dosage, medicine.frequency].filter(Boolean).join(' · ');
-  return (
-    <TouchableOpacity style={medCard.card} onPress={onPress} activeOpacity={0.75}>
-      <View style={{ flex: 1 }}>
-        <Text style={medCard.name}>{medicine.name}</Text>
-        {sub ? <Text style={medCard.sub}>{sub}</Text> : null}
-      </View>
-      <Text style={medCard.chevron}>›</Text>
-    </TouchableOpacity>
-  );
-}
-
-const medCard = StyleSheet.create({
-  card: {
-    backgroundColor: '#f8f9ff',
-    borderWidth: 1,
-    borderColor: '#e0e4ff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  name: { fontSize: 16, fontWeight: '600', color: '#1a1a2e' },
-  sub: { fontSize: 13, color: '#666', marginTop: 3 },
-  chevron: { fontSize: 22, color: '#bbb', marginLeft: 8 },
-});
 
 function TabBar({ active, onChange }) {
   const tabs = ['Personal', 'Rx'];
@@ -159,7 +77,7 @@ const Field = React.forwardRef(({
   </View>
 ));
 
-export default function PatientDetailScreen({ route }) {
+export default function PatientDetailScreen({ route, navigation }) {
   const { patient } = route.params;
   const [activeTab, setActiveTab] = useState('Personal');
   const [recognizing, setRecognizing] = useState(false);
@@ -176,13 +94,6 @@ export default function PatientDetailScreen({ route }) {
   const [bp, setBp] = useState('');
   const [weight, setWeight] = useState('');
   const [weightUnit, setWeightUnit] = useState('kg');
-
-  // Medicines
-  const [medicines, setMedicines] = useState([]);
-  const [detailSheet, setDetailSheet] = useState({ visible: false, med: null });
-  const [addSheetVisible, setAddSheetVisible] = useState(false);
-  const [medForm, setMedForm] = useState(EMPTY_FORM);
-  const [addLoading, setAddLoading] = useState(false);
 
   // Refs
   const notesRef = useRef(null);
@@ -202,17 +113,12 @@ export default function PatientDetailScreen({ route }) {
   const findingsInput = useGestureTextInput({ label: 'Findings', value: findings, setValue: setFindings, inputRef: findingsRef });
   const bpInput = useGestureTextInput({ label: 'Blood Pressure', value: bp, setValue: setBp, inputRef: bpRef });
   const weightInput = useGestureTextInput({ label: 'Weight', value: weight, setValue: setWeight, inputRef: weightRef });
-  const medNameInput = useGestureTextInput({ label: 'Medicine Name', value: medForm.name, setValue: value => setMedForm(form => ({ ...form, name: value })) });
-  const medDosageInput = useGestureTextInput({ label: 'Medicine Dosage', value: medForm.dosage, setValue: value => setMedForm(form => ({ ...form, dosage: value })) });
-  const medFrequencyInput = useGestureTextInput({ label: 'Medicine Frequency', value: medForm.frequency, setValue: value => setMedForm(form => ({ ...form, frequency: value })) });
-  const medDurationInput = useGestureTextInput({ label: 'Medicine Duration', value: medForm.duration, setValue: value => setMedForm(form => ({ ...form, duration: value })) });
-  const medInstructionsInput = useGestureTextInput({ label: 'Medicine Instructions', value: medForm.instructions, setValue: value => setMedForm(form => ({ ...form, instructions: value })) });
 
   const activeIndexRef = useRef(0);
   const shouldAdvanceRef = useRef(false);
   const fabBottom = useRef(new Animated.Value(32)).current;
 
-  useEffect(() => {
+  React.useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => Animated.timing(fabBottom, {
@@ -229,25 +135,24 @@ export default function PatientDetailScreen({ route }) {
         useNativeDriver: false,
       }).start()
     );
-    return () => { show.remove(); hide.remove(); };
-  }, []);
-
-  useEffect(() => {
-    getMedicines(patient.id).then(setMedicines).catch(() => {});
-  }, [patient.id]);
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [fabBottom]);
 
   const personalFields = [
     { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true, input: notesInput },
   ];
 
   const rxFields = [
-    { ref: complaintsRef,     setter: setComplaints,     value: complaints,     label: 'Complaints',            multiline: true,  input: complaintsInput     },
-    { ref: diagnosisRef,      setter: setDiagnosis,      value: diagnosis,      label: 'Diagnosis',             multiline: true,  input: diagnosisInput      },
-    { ref: investigationsRef, setter: setInvestigations, value: investigations, label: 'Investigations',        multiline: true,  input: investigationsInput },
-    { ref: proceduresRef,     setter: setProcedures,     value: procedures,     label: 'Procedures',            multiline: true,  input: proceduresInput     },
-    { ref: findingsRef,       setter: setFindings,       value: findings,       label: 'Findings',              multiline: true,  input: findingsInput       },
-    { ref: bpRef,             setter: setBp,             value: bp,             label: 'Blood Pressure (mmHg)', multiline: false, input: bpInput             },
-    { ref: weightRef,         setter: setWeight,         value: weight,         label: 'Weight',                multiline: false, keyboardType: 'decimal-pad', input: weightInput },
+    { ref: complaintsRef, setter: setComplaints, value: complaints, label: 'Complaints', multiline: true, input: complaintsInput },
+    { ref: diagnosisRef, setter: setDiagnosis, value: diagnosis, label: 'Diagnosis', multiline: true, input: diagnosisInput },
+    { ref: investigationsRef, setter: setInvestigations, value: investigations, label: 'Investigations', multiline: true, input: investigationsInput },
+    { ref: proceduresRef, setter: setProcedures, value: procedures, label: 'Procedures', multiline: true, input: proceduresInput },
+    { ref: findingsRef, setter: setFindings, value: findings, label: 'Findings', multiline: true, input: findingsInput },
+    { ref: bpRef, setter: setBp, value: bp, label: 'Blood Pressure (mmHg)', multiline: false, input: bpInput },
+    { ref: weightRef, setter: setWeight, value: weight, label: 'Weight', multiline: false, keyboardType: 'decimal-pad', input: weightInput },
   ];
 
   const currentFields = activeTab === 'Personal' ? personalFields : rxFields;
@@ -277,6 +182,10 @@ export default function PatientDetailScreen({ route }) {
     setActiveTab(tab);
   }
 
+  function openMedicines() {
+    navigation.navigate('PatientMedicines', { patient });
+  }
+
   async function handlePress() {
     if (recognizing) {
       shouldAdvanceRef.current = true;
@@ -293,47 +202,6 @@ export default function PatientDetailScreen({ route }) {
 
   function handleLongPress() {
     if (recognizing) ExpoSpeechRecognitionModule.stop();
-  }
-
-  async function handleAddMedicine() {
-    if (!medForm.name.trim()) {
-      Alert.alert('Required', 'Medicine name is required.');
-      return;
-    }
-    setAddLoading(true);
-    try {
-      const fields = {
-        name: medForm.name.trim(),
-        dosage: medForm.dosage.trim(),
-        frequency: medForm.frequency.trim(),
-        duration: medForm.duration.trim(),
-        route: medForm.route,
-        instructions: medForm.instructions.trim(),
-      };
-      const id = await addMedicine(patient.id, fields);
-      setMedicines(prev => [...prev, { id, patient_id: patient.id, ...fields }]);
-      setAddSheetVisible(false);
-      setMedForm(EMPTY_FORM);
-    } catch {
-      Alert.alert('Error', 'Failed to save medicine.');
-    } finally {
-      setAddLoading(false);
-    }
-  }
-
-  function handleDeleteMedicine(id) {
-    Alert.alert('Delete Medicine', 'Remove this medicine?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteMedicine(id);
-          setMedicines(prev => prev.filter(m => m.id !== id));
-          setDetailSheet({ visible: false, med: null });
-        },
-      },
-    ]);
   }
 
   return (
@@ -366,24 +234,15 @@ export default function PatientDetailScreen({ route }) {
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
-            {/* Medicines */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Medicines</Text>
-              <TouchableOpacity style={styles.addMedBtn} onPress={() => setAddSheetVisible(true)}>
-                <Text style={styles.addMedBtnText}>+ Add</Text>
+            <View style={styles.medCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.medTitle}>Medicines</Text>
+                <Text style={styles.medSubtitle}>Open full list, add/remove meds, and view previous medicine history.</Text>
+              </View>
+              <TouchableOpacity style={styles.medButton} onPress={openMedicines}>
+                <Text style={styles.medButtonText}>Open</Text>
               </TouchableOpacity>
             </View>
-            {medicines.length === 0 ? (
-              <Text style={styles.noMeds}>No medicines added yet.</Text>
-            ) : (
-              medicines.map(med => (
-                <MedicineCard
-                  key={med.id}
-                  medicine={med}
-                  onPress={() => setDetailSheet({ visible: true, med })}
-                />
-              ))
-            )}
 
             <View style={styles.divider} />
 
@@ -438,7 +297,6 @@ export default function PatientDetailScreen({ route }) {
                 />
               )
             )}
-
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -453,147 +311,6 @@ export default function PatientDetailScreen({ route }) {
           <Text style={styles.fabIcon}>{recognizing ? '⏹' : '🎙'}</Text>
         </Pressable>
       </Animated.View>
-
-      {/* Medicine detail sheet */}
-      <BottomSheet
-        visible={detailSheet.visible}
-        onClose={() => setDetailSheet({ visible: false, med: null })}
-        title={detailSheet.med?.name}
-      >
-        {detailSheet.med && (
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {[
-              { label: 'Dosage',       value: detailSheet.med.dosage },
-              { label: 'Frequency',    value: detailSheet.med.frequency },
-              { label: 'Duration',     value: detailSheet.med.duration },
-              { label: 'Route',        value: detailSheet.med.route },
-              { label: 'Instructions', value: detailSheet.med.instructions },
-            ].map(({ label, value }) =>
-              value ? (
-                <View key={label} style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>{label}</Text>
-                  <Text style={styles.detailValue}>{value}</Text>
-                </View>
-              ) : null
-            )}
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => handleDeleteMedicine(detailSheet.med.id)}
-            >
-              <Text style={styles.deleteBtnText}>Delete Medicine</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-      </BottomSheet>
-
-      {/* Add medicine sheet */}
-      <BottomSheet
-        visible={addSheetVisible}
-        onClose={() => { setAddSheetVisible(false); setMedForm(EMPTY_FORM); }}
-        title="Add Medicine"
-      >
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <Text style={styles.fieldLabel}>Name *</Text>
-          <TextInput
-            ref={medNameInput.ref}
-            style={[styles.fieldInput, { marginBottom: 16 }]}
-            value={medForm.name}
-            onChangeText={v => setMedForm(f => ({ ...f, name: v }))}
-            showSoftInputOnFocus={medNameInput.showSoftInputOnFocus}
-            onFocus={medNameInput.onFocus}
-            onBlur={medNameInput.onBlur}
-            onSelectionChange={medNameInput.onSelectionChange}
-            selection={medNameInput.selection}
-            placeholder="e.g. Amoxicillin"
-            placeholderTextColor="#bbb"
-            autoCapitalize="words"
-          />
-
-          <Text style={styles.fieldLabel}>Dosage</Text>
-          <TextInput
-            ref={medDosageInput.ref}
-            style={[styles.fieldInput, { marginBottom: 16 }]}
-            value={medForm.dosage}
-            onChangeText={v => setMedForm(f => ({ ...f, dosage: v }))}
-            showSoftInputOnFocus={medDosageInput.showSoftInputOnFocus}
-            onFocus={medDosageInput.onFocus}
-            onBlur={medDosageInput.onBlur}
-            onSelectionChange={medDosageInput.onSelectionChange}
-            selection={medDosageInput.selection}
-            placeholder="e.g. 500mg"
-            placeholderTextColor="#bbb"
-          />
-
-          <Text style={styles.fieldLabel}>Frequency</Text>
-          <TextInput
-            ref={medFrequencyInput.ref}
-            style={[styles.fieldInput, { marginBottom: 16 }]}
-            value={medForm.frequency}
-            onChangeText={v => setMedForm(f => ({ ...f, frequency: v }))}
-            showSoftInputOnFocus={medFrequencyInput.showSoftInputOnFocus}
-            onFocus={medFrequencyInput.onFocus}
-            onBlur={medFrequencyInput.onBlur}
-            onSelectionChange={medFrequencyInput.onSelectionChange}
-            selection={medFrequencyInput.selection}
-            placeholder="e.g. Twice daily"
-            placeholderTextColor="#bbb"
-          />
-
-          <Text style={styles.fieldLabel}>Duration</Text>
-          <TextInput
-            ref={medDurationInput.ref}
-            style={[styles.fieldInput, { marginBottom: 16 }]}
-            value={medForm.duration}
-            onChangeText={v => setMedForm(f => ({ ...f, duration: v }))}
-            showSoftInputOnFocus={medDurationInput.showSoftInputOnFocus}
-            onFocus={medDurationInput.onFocus}
-            onBlur={medDurationInput.onBlur}
-            onSelectionChange={medDurationInput.onSelectionChange}
-            selection={medDurationInput.selection}
-            placeholder="e.g. 7 days"
-            placeholderTextColor="#bbb"
-          />
-
-          <Text style={styles.fieldLabel}>Route</Text>
-          <View style={styles.routeRow}>
-            {ROUTES.map(r => (
-              <TouchableOpacity
-                key={r}
-                style={[styles.routeChip, medForm.route === r && styles.routeChipActive]}
-                onPress={() => setMedForm(f => ({ ...f, route: r }))}
-              >
-                <Text style={[styles.routeChipText, medForm.route === r && styles.routeChipTextActive]}>{r}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.fieldLabel}>Instructions</Text>
-          <TextInput
-            ref={medInstructionsInput.ref}
-            style={[styles.fieldInput, styles.fieldInputMultiline, { marginBottom: 24 }]}
-            value={medForm.instructions}
-            onChangeText={v => setMedForm(f => ({ ...f, instructions: v }))}
-            showSoftInputOnFocus={medInstructionsInput.showSoftInputOnFocus}
-            onFocus={medInstructionsInput.onFocus}
-            onBlur={medInstructionsInput.onBlur}
-            onSelectionChange={medInstructionsInput.onSelectionChange}
-            selection={medInstructionsInput.selection}
-            placeholder="e.g. Take after meals"
-            placeholderTextColor="#bbb"
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-
-          <TouchableOpacity
-            style={[styles.saveBtn, addLoading && { opacity: 0.6 }]}
-            onPress={handleAddMedicine}
-            disabled={addLoading}
-          >
-            <Text style={styles.saveBtnText}>{addLoading ? 'Saving…' : 'Save Medicine'}</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </BottomSheet>
     </View>
   );
 }
@@ -654,6 +371,43 @@ const styles = StyleSheet.create({
     color: '#555',
     marginTop: 4,
   },
+  medCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  medTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: 4,
+  },
+  medSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#5f6d8a',
+  },
+  medButton: {
+    backgroundColor: '#4f6ef7',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  medButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e8e8e8',
+    marginVertical: 24,
+  },
   fieldGroup: {
     marginBottom: 20,
   },
@@ -710,111 +464,6 @@ const styles = StyleSheet.create({
   unitBtnTextActive: {
     color: '#fff',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#e8e8e8',
-    marginVertical: 24,
-  },
-  // Medicines section
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1a1a2e',
-  },
-  addMedBtn: {
-    backgroundColor: '#4f6ef7',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  addMedBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  noMeds: {
-    color: '#aaa',
-    fontSize: 14,
-    textAlign: 'center',
-    marginVertical: 16,
-  },
-  // Detail sheet
-  detailRow: {
-    marginBottom: 20,
-  },
-  detailLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 16,
-    color: '#1a1a2e',
-  },
-  deleteBtn: {
-    borderWidth: 1,
-    borderColor: '#e74c3c',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  deleteBtnText: {
-    color: '#e74c3c',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  // Add medicine form
-  routeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  routeChip: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: '#fff',
-  },
-  routeChipActive: {
-    backgroundColor: '#4f6ef7',
-    borderColor: '#4f6ef7',
-  },
-  routeChipText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  routeChipTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  saveBtn: {
-    backgroundColor: '#4f6ef7',
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // FAB
   fab: {
     position: 'absolute',
     right: 24,

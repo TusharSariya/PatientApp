@@ -46,6 +46,7 @@ describe('database', () => {
     expect(SQLite.openDatabaseAsync).toHaveBeenCalledTimes(1);
     expect(SQLite.openDatabaseAsync).toHaveBeenCalledWith('patients.db');
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS patients'));
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS medicine_history'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS gestures'));
   });
 
@@ -102,7 +103,7 @@ describe('database', () => {
     expect(rows).toHaveLength(2);
   });
 
-  test('medicine helpers read, insert, and delete medicines', async () => {
+  test('medicine helpers read, insert, delete, and history medicines', async () => {
     const db = createMockDb();
     db.getAllAsync.mockImplementation(async (sql, params) => {
       if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
@@ -110,17 +111,38 @@ describe('database', () => {
         expect(params).toEqual([99]);
         return [{ id: 1, patient_id: 99, name: 'Ibuprofen' }];
       }
+      if (sql.includes('FROM medicine_history')) {
+        expect(params).toEqual([99]);
+        return [{ id: 10, patient_id: 99, name: 'Ibuprofen', action: 'removed' }];
+      }
       return [];
     });
-    db.runAsync.mockResolvedValue({ lastInsertRowId: 42, changes: 1 });
+    db.getFirstAsync.mockResolvedValue({
+      id: 42,
+      patient_id: 99,
+      name: 'Ibuprofen',
+      dosage: '',
+      frequency: '',
+      duration: '',
+      route: '',
+      instructions: '',
+    });
+    db.runAsync
+      .mockResolvedValueOnce({ lastInsertRowId: 42, changes: 1 })
+      .mockResolvedValueOnce({ lastInsertRowId: 43, changes: 1 })
+      .mockResolvedValueOnce({ lastInsertRowId: 0, changes: 1 })
+      .mockResolvedValueOnce({ lastInsertRowId: 44, changes: 1 });
     const { database } = await loadDatabaseModule({ dev: false, db });
 
     const meds = await database.getMedicines(99);
     const medId = await database.addMedicine(99, { name: 'Ibuprofen' });
     await database.deleteMedicine(medId);
+    const history = await database.getMedicineHistory(99);
 
     expect(meds).toEqual([{ id: 1, patient_id: 99, name: 'Ibuprofen' }]);
     expect(medId).toBe(42);
+    expect(history).toEqual([{ id: 10, patient_id: 99, name: 'Ibuprofen', action: 'removed' }]);
+
     expect(db.runAsync).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining('INSERT INTO medicines'),
@@ -128,9 +150,20 @@ describe('database', () => {
     );
     expect(db.runAsync).toHaveBeenNthCalledWith(
       2,
+      expect.stringContaining('INSERT INTO medicine_history'),
+      [99, 42, 'Ibuprofen', '', '', '', '', '', 'added']
+    );
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      3,
       expect.stringContaining('DELETE FROM medicines'),
       [42]
     );
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('INSERT INTO medicine_history'),
+      [99, 42, 'Ibuprofen', '', '', '', '', '', 'removed']
+    );
+    expect(db.getFirstAsync).toHaveBeenCalledWith('SELECT * FROM medicines WHERE id = ?', [42]);
   });
 
   test('gesture helpers list, insert, and delete gestures', async () => {
