@@ -34,6 +34,7 @@ function SearchField({ label, value, onChangeText, input, placeholder }) {
         placeholder={placeholder}
         value={value}
         onChangeText={onChangeText}
+        showSoftInputOnFocus={input.showSoftInputOnFocus}
         onFocus={input.onFocus}
         onBlur={input.onBlur}
         onSelectionChange={input.onSelectionChange}

@@ -133,6 +133,7 @@ const Field = React.forwardRef(({
   onBlur,
   onSelectionChange,
   selection,
+  showSoftInputOnFocus,
   onGesturePress,
   multiline,
   keyboardType,
@@ -147,6 +148,7 @@ const Field = React.forwardRef(({
       style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
       value={value}
       onChangeText={onChange}
+      showSoftInputOnFocus={showSoftInputOnFocus}
       onFocus={onFocus}
       onBlur={onBlur}
       onSelectionChange={onSelectionChange}
@@ -360,6 +362,7 @@ export default function PatientDetailScreen({ route }) {
               onBlur={f.input.onBlur}
               onSelectionChange={f.input.onSelectionChange}
               selection={f.input.selection}
+              showSoftInputOnFocus={f.input.showSoftInputOnFocus}
               onGesturePress={() => {
                 activeIndexRef.current = i;
                 f.input.openGestureInput();
@@ -408,6 +411,7 @@ export default function PatientDetailScreen({ route }) {
                       style={[styles.fieldInput, styles.weightInput]}
                       value={f.value}
                       onChangeText={f.setter}
+                      showSoftInputOnFocus={f.input.showSoftInputOnFocus}
                       onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
                       onBlur={f.input.onBlur}
                       onSelectionChange={f.input.onSelectionChange}
@@ -442,6 +446,7 @@ export default function PatientDetailScreen({ route }) {
                   onBlur={f.input.onBlur}
                   onSelectionChange={f.input.onSelectionChange}
                   selection={f.input.selection}
+                  showSoftInputOnFocus={f.input.showSoftInputOnFocus}
                   onGesturePress={() => {
                     activeIndexRef.current = i;
                     f.input.openGestureInput();
@@ -515,6 +520,7 @@ export default function PatientDetailScreen({ route }) {
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.name}
             onChangeText={v => setMedForm(f => ({ ...f, name: v }))}
+            showSoftInputOnFocus={medNameInput.showSoftInputOnFocus}
             onFocus={medNameInput.onFocus}
             onBlur={medNameInput.onBlur}
             onSelectionChange={medNameInput.onSelectionChange}
@@ -533,6 +539,7 @@ export default function PatientDetailScreen({ route }) {
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.dosage}
             onChangeText={v => setMedForm(f => ({ ...f, dosage: v }))}
+            showSoftInputOnFocus={medDosageInput.showSoftInputOnFocus}
             onFocus={medDosageInput.onFocus}
             onBlur={medDosageInput.onBlur}
             onSelectionChange={medDosageInput.onSelectionChange}
@@ -550,6 +557,7 @@ export default function PatientDetailScreen({ route }) {
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.frequency}
             onChangeText={v => setMedForm(f => ({ ...f, frequency: v }))}
+            showSoftInputOnFocus={medFrequencyInput.showSoftInputOnFocus}
             onFocus={medFrequencyInput.onFocus}
             onBlur={medFrequencyInput.onBlur}
             onSelectionChange={medFrequencyInput.onSelectionChange}
@@ -567,6 +575,7 @@ export default function PatientDetailScreen({ route }) {
             style={[styles.fieldInput, { marginBottom: 16 }]}
             value={medForm.duration}
             onChangeText={v => setMedForm(f => ({ ...f, duration: v }))}
+            showSoftInputOnFocus={medDurationInput.showSoftInputOnFocus}
             onFocus={medDurationInput.onFocus}
             onBlur={medDurationInput.onBlur}
             onSelectionChange={medDurationInput.onSelectionChange}
@@ -597,6 +606,7 @@ export default function PatientDetailScreen({ route }) {
             style={[styles.fieldInput, styles.fieldInputMultiline, { marginBottom: 24 }]}
             value={medForm.instructions}
             onChangeText={v => setMedForm(f => ({ ...f, instructions: v }))}
+            showSoftInputOnFocus={medInstructionsInput.showSoftInputOnFocus}
             onFocus={medInstructionsInput.onFocus}
             onBlur={medInstructionsInput.onBlur}
             onSelectionChange={medInstructionsInput.onSelectionChange}

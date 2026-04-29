@@ -73,6 +73,7 @@ export default function AddPatientScreen() {
           placeholder="e.g. John"
           value={firstName}
           onChangeText={setFirstName}
+          showSoftInputOnFocus={firstNameInput.showSoftInputOnFocus}
           onFocus={firstNameInput.onFocus}
           onBlur={firstNameInput.onBlur}
           onSelectionChange={firstNameInput.onSelectionChange}
@@ -87,6 +88,7 @@ export default function AddPatientScreen() {
           placeholder="Optional"
           value={middleName}
           onChangeText={setMiddleName}
+          showSoftInputOnFocus={middleNameInput.showSoftInputOnFocus}
           onFocus={middleNameInput.onFocus}
           onBlur={middleNameInput.onBlur}
           onSelectionChange={middleNameInput.onSelectionChange}
@@ -101,6 +103,7 @@ export default function AddPatientScreen() {
           placeholder="e.g. Smith"
           value={lastName}
           onChangeText={setLastName}
+          showSoftInputOnFocus={lastNameInput.showSoftInputOnFocus}
           onFocus={lastNameInput.onFocus}
           onBlur={lastNameInput.onBlur}
           onSelectionChange={lastNameInput.onSelectionChange}
@@ -115,6 +118,7 @@ export default function AddPatientScreen() {
           placeholder="e.g. 555-123-4567"
           value={phone}
           onChangeText={setPhone}
+          showSoftInputOnFocus={phoneInput.showSoftInputOnFocus}
           onFocus={phoneInput.onFocus}
           onBlur={phoneInput.onBlur}
           onSelectionChange={phoneInput.onSelectionChange}
@@ -129,6 +133,7 @@ export default function AddPatientScreen() {
           placeholder="e.g. 123 Main St, City, State"
           value={address}
           onChangeText={setAddress}
+          showSoftInputOnFocus={addressInput.showSoftInputOnFocus}
           onFocus={addressInput.onFocus}
           onBlur={addressInput.onBlur}
           onSelectionChange={addressInput.onSelectionChange}

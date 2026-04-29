@@ -58,6 +58,7 @@ export function GestureInputProvider({ children }) {
   const [gestures, setGestures] = useState([]);
   const [padResetKey, setPadResetKey] = useState(0);
   const [resultState, setResultState] = useState('idle');
+  const [lastMatchedWord, setLastMatchedWord] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
 
   const activeFieldRef = useRef(null);
@@ -141,27 +142,49 @@ export function GestureInputProvider({ children }) {
     setActiveField(field);
     setPadResetKey(previous => previous + 1);
     setResultState('idle');
+    setLastMatchedWord('');
     setIsDrawing(false);
     setOverlayVisible(true);
     Keyboard.dismiss();
   }
 
-  function closeOverlay({ refocus = false } = {}) {
-    setOverlayVisible(false);
+  function resetOverlayState() {
     setResultState('idle');
+    setLastMatchedWord('');
     setIsDrawing(false);
     setPadResetKey(previous => previous + 1);
+  }
 
-    if (refocus) {
+  function closeOverlay({ blurField = true } = {}) {
+    setOverlayVisible(false);
+    resetOverlayState();
+
+    if (blurField) {
       const field = activeFieldRef.current;
-      setTimeout(() => field?.focus?.(), 180);
+      setTimeout(() => field?.blur?.(), 0);
     }
   }
 
   function clearResult() {
-    setPadResetKey(previous => previous + 1);
-    setResultState('idle');
-    setIsDrawing(false);
+    resetOverlayState();
+  }
+
+  function switchToKeyboard() {
+    const field = activeFieldRef.current;
+    if (!field) {
+      closeOverlay({ blurField: false });
+      return;
+    }
+
+    clearBlurTimer();
+    field.armKeyboardFocus?.();
+    setOverlayVisible(false);
+    resetOverlayState();
+
+    field.blur?.();
+    setTimeout(() => {
+      field.focus?.();
+    }, Platform.OS === 'ios' ? 180 : 80);
   }
 
   function insertMatchedWord(word) {
@@ -185,18 +208,22 @@ export function GestureInputProvider({ children }) {
     setIsDrawing(false);
 
     if (!gesture) {
+      setLastMatchedWord('');
       setResultState('invalid');
       return;
     }
 
     const match = matchGesture(gesture, gestures);
     if (!match) {
+      setLastMatchedWord('');
       setResultState('no-match');
       return;
     }
 
     insertMatchedWord(match.word);
-    closeOverlay({ refocus: true });
+    setLastMatchedWord(match.word);
+    setResultState('matched');
+    setPadResetKey(previous => previous + 1);
   }
 
   const hasGestures = gestures.length > 0;
@@ -206,9 +233,9 @@ export function GestureInputProvider({ children }) {
       <View style={styles.root}>
         {children}
 
-        <Modal visible={overlayVisible} transparent animationType="slide" onRequestClose={() => closeOverlay({ refocus: true })}>
+        <Modal visible={overlayVisible} transparent animationType="slide" onRequestClose={() => closeOverlay()}>
           <View style={styles.overlay}>
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeOverlay({ refocus: true })} />
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeOverlay()} />
             <View style={styles.sheet}>
               <View style={styles.handle} />
               <View style={styles.header}>
@@ -216,7 +243,7 @@ export function GestureInputProvider({ children }) {
                   <Text style={styles.eyebrow}>Gesture Input</Text>
                   <Text style={styles.title}>Insert into {activeField?.label ?? 'Field'}</Text>
                 </View>
-                <TouchableOpacity style={styles.closeButton} onPress={() => closeOverlay({ refocus: true })}>
+                <TouchableOpacity style={styles.closeButton} onPress={() => closeOverlay()}>
                   <Text style={styles.closeButtonText}>Close</Text>
                 </TouchableOpacity>
               </View>
@@ -227,7 +254,7 @@ export function GestureInputProvider({ children }) {
                 <>
                   <Text style={styles.subhead}>
                     {hasGestures
-                      ? 'Draw a saved gesture to insert its word into the active text box.'
+                      ? 'Draw a saved gesture to insert its word. The sheet stays open until you close it.'
                       : 'No touch gestures are available yet. Add them in Manage Gestures first.'}
                   </Text>
 
@@ -241,6 +268,7 @@ export function GestureInputProvider({ children }) {
                   <View
                     style={[
                       styles.resultPanel,
+                      resultState === 'matched' && styles.resultSuccess,
                       resultState === 'no-match' && styles.resultWarn,
                       resultState === 'invalid' && styles.resultWarn,
                     ]}
@@ -248,11 +276,14 @@ export function GestureInputProvider({ children }) {
                     <Text
                       style={[
                         styles.resultLabel,
+                        resultState === 'matched' && styles.resultLabelSuccess,
                         (resultState === 'no-match' || resultState === 'invalid') && styles.resultLabelWarn,
                       ]}
                     >
                       {isDrawing
                         ? 'Drawing'
+                        : resultState === 'matched'
+                          ? 'Inserted'
                         : resultState === 'no-match'
                           ? 'No Matching Gesture'
                           : resultState === 'invalid'
@@ -262,6 +293,8 @@ export function GestureInputProvider({ children }) {
                     <Text style={styles.resultText}>
                       {isDrawing
                         ? 'Lift your fingers to finish.'
+                        : resultState === 'matched'
+                          ? `"${lastMatchedWord}" inserted. Draw the next gesture or close when done.`
                         : resultState === 'no-match'
                           ? 'Try again with a more consistent gesture.'
                           : resultState === 'invalid'
@@ -276,8 +309,8 @@ export function GestureInputProvider({ children }) {
                     <TouchableOpacity style={styles.secondaryButton} onPress={clearResult}>
                       <Text style={styles.secondaryButtonText}>Clear</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.primaryButton} onPress={() => closeOverlay({ refocus: true })}>
-                      <Text style={styles.primaryButtonText}>Back to Field</Text>
+                    <TouchableOpacity style={styles.primaryButton} onPress={switchToKeyboard}>
+                      <Text style={styles.primaryButtonText}>Use Keyboard</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -296,7 +329,9 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
   const resolvedRef = inputRef ?? localRef;
   const fieldIdRef = useRef(`gesture-input-${nextFieldId++}`);
   const releaseFieldRef = useRef(context?.releaseField);
+  const focusModeRef = useRef('gesture');
   const valueRef = useRef(value ?? '');
+  const [showSoftInputOnFocus, setShowSoftInputOnFocus] = useState(false);
   const [selection, setSelection] = useState(getDefaultSelection(value ?? ''));
   const selectionRef = useRef(selection);
   const controllerRef = useRef({
@@ -310,6 +345,11 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
       setSelection(nextSelection);
     },
     focus: () => resolvedRef.current?.focus?.(),
+    blur: () => resolvedRef.current?.blur?.(),
+    armKeyboardFocus: () => {
+      focusModeRef.current = 'keyboard';
+      setShowSoftInputOnFocus(true);
+    },
   });
 
   useEffect(() => {
@@ -337,6 +377,13 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
 
   function handleFocus(event) {
     context?.focusField?.(controllerRef.current);
+    const focusMode = focusModeRef.current;
+    focusModeRef.current = 'gesture';
+    if (focusMode === 'keyboard') {
+      setShowSoftInputOnFocus(false);
+      return event;
+    }
+    context?.openFieldOverlay?.(controllerRef.current);
     return event;
   }
 
@@ -355,6 +402,7 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
   return {
     ref: resolvedRef,
     selection,
+    showSoftInputOnFocus,
     onFocus: handleFocus,
     onBlur: handleBlur,
     onSelectionChange: handleSelectionChange,
@@ -447,6 +495,9 @@ const styles = StyleSheet.create({
   resultWarn: {
     backgroundColor: '#fef9f0',
   },
+  resultSuccess: {
+    backgroundColor: '#eafaf1',
+  },
   resultLabel: {
     fontSize: 12,
     fontWeight: '700',
@@ -456,6 +507,9 @@ const styles = StyleSheet.create({
   },
   resultLabelWarn: {
     color: '#e67e22',
+  },
+  resultLabelSuccess: {
+    color: '#27ae60',
   },
   resultText: {
     fontSize: 15,
