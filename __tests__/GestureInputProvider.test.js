@@ -171,6 +171,17 @@ describe('GestureInputProvider', () => {
     });
   });
 
+  test('closes gesture sheet from done button', async () => {
+    renderHarness('Symptoms');
+    await openGestureSheet();
+
+    fireEvent.press(screen.getByText('Done'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Gesture Input')).toBeNull();
+    });
+  });
+
   test('streams matched gestures into active field while sheet stays open', async () => {
     renderHarness('Symptoms');
     await openGestureSheet();
@@ -180,7 +191,6 @@ describe('GestureInputProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms cold');
     });
-    expect(screen.getByText(/"cold" inserted/)).toBeTruthy();
     expect(screen.getByText('Gesture Input')).toBeTruthy();
   });
 
@@ -238,21 +248,23 @@ describe('GestureInputProvider', () => {
 
     fireEvent.press(screen.getByText('Invert Gesture'));
     expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms no cold');
-    expect(screen.getByText(/"no cold" applied/)).toBeTruthy();
 
     fireEvent.press(screen.getByText('Invert Gesture'));
     expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms cold');
-    expect(screen.getByText(/"cold" applied/)).toBeTruthy();
   });
 
-  test('shows no-match and invalid capture states', async () => {
+  test('ignores unmatched and invalid gestures without changing field text', async () => {
     renderHarness('Symptoms');
     await openGestureSheet();
 
     fireEvent.press(screen.getByText('Draw Unknown'));
-    await waitFor(() => expect(screen.getByText('No Matching Gesture')).toBeTruthy());
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms');
+    });
 
     fireEvent.press(screen.getByText('Draw Invalid'));
-    await waitFor(() => expect(screen.getByText('Gesture Too Small')).toBeTruthy());
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms');
+    });
   });
 });

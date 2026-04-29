@@ -5,7 +5,6 @@ import {
   Keyboard,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -519,8 +518,12 @@ export function GestureInputProvider({ children }) {
 
         <Modal visible={overlayVisible} transparent animationType="slide" onRequestClose={() => closeOverlay()}>
           <View style={styles.overlay}>
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeOverlay()} />
-            <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+            <Animated.View
+              style={[
+                styles.sheet,
+                { transform: [{ translateY: sheetTranslateY }] },
+              ]}
+            >
               <View
                 testID="gesture-sheet-drag-handle"
                 style={styles.handleTouchTarget}
@@ -536,7 +539,6 @@ export function GestureInputProvider({ children }) {
               <View style={styles.header}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.eyebrow}>Gesture Input</Text>
-                  <Text style={styles.title}>Insert into {activeField?.label ?? 'Field'}</Text>
                 </View>
                 <TouchableOpacity style={styles.closeButton} onPress={() => closeOverlay()}>
                   <Text style={styles.closeButtonText}>Close</Text>
@@ -547,12 +549,6 @@ export function GestureInputProvider({ children }) {
                 <ActivityIndicator size="large" color="#4f6ef7" style={styles.loader} />
               ) : (
                 <>
-                  <Text style={styles.subhead}>
-                    {hasGestures
-                      ? 'Draw a saved gesture to insert its word. The sheet stays open until you close it.'
-                      : 'No touch gestures are available yet. Add them in Manage Gestures first.'}
-                  </Text>
-
                   <View style={styles.previewPanel}>
                     <Text style={styles.previewLabel}>Live Field Preview</Text>
                     <Text style={styles.previewText}>
@@ -560,55 +556,14 @@ export function GestureInputProvider({ children }) {
                     </Text>
                   </View>
 
-                  <GesturePad
-                    disabled={!hasGestures}
-                    resetKey={padResetKey}
-                    onGestureComplete={handleGestureComplete}
-                    onDrawingChange={handleDrawingChange}
-                  />
-
-                  <View
-                    style={[
-                      styles.resultPanel,
-                      (resultState === 'inserted' || resultState === 'inverted') && styles.resultSuccess,
-                      resultState === 'no-match' && styles.resultWarn,
-                      resultState === 'invalid' && styles.resultWarn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.resultLabel,
-                        (resultState === 'inserted' || resultState === 'inverted') && styles.resultLabelSuccess,
-                        (resultState === 'no-match' || resultState === 'invalid') && styles.resultLabelWarn,
-                      ]}
-                    >
-                      {isDrawing
-                        ? 'Drawing'
-                        : resultState === 'inserted'
-                          ? 'Inserted'
-                        : resultState === 'inverted'
-                          ? 'Inverted'
-                        : resultState === 'no-match'
-                          ? 'No Matching Gesture'
-                        : resultState === 'invalid'
-                            ? 'Gesture Too Small'
-                            : 'Ready'}
-                    </Text>
-                    <Text style={styles.resultText}>
-                      {isDrawing
-                        ? 'Lift your fingers to finish.'
-                        : resultState === 'inserted'
-                          ? `"${lastMatchedWord}" inserted. Draw the next gesture or close when done.`
-                        : resultState === 'inverted'
-                          ? `"${lastMatchedWord}" applied.`
-                        : resultState === 'no-match'
-                          ? 'Try again with a more consistent gesture.'
-                        : resultState === 'invalid'
-                            ? 'Draw a larger gesture before lifting your fingers.'
-                            : hasGestures
-                              ? 'Open gesture mode only when you want to insert a saved word.'
-                              : 'You can create gestures from Settings → Manage Gestures.'}
-                    </Text>
+                  <View style={styles.gesturePadSlot}>
+                    <GesturePad
+                      disabled={!hasGestures}
+                      fill
+                      resetKey={padResetKey}
+                      onGestureComplete={handleGestureComplete}
+                      onDrawingChange={handleDrawingChange}
+                    />
                   </View>
 
                   <View style={styles.actionGrid}>
@@ -626,6 +581,9 @@ export function GestureInputProvider({ children }) {
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.secondaryButton} onPress={clearResult}>
                       <Text style={styles.secondaryButtonText}>Clear Pad</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.primaryButton} onPress={() => closeOverlay()}>
+                      <Text style={styles.primaryButtonText}>Done</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -737,13 +695,11 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
     backgroundColor: 'rgba(15,18,37,0.35)',
   },
   sheet: {
+    flex: 1,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
@@ -776,11 +732,6 @@ const styles = StyleSheet.create({
     color: '#7d8597',
     marginBottom: 4,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1a1a2e',
-  },
   closeButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -794,12 +745,6 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginVertical: 48,
-  },
-  subhead: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#61708a',
-    marginBottom: 12,
   },
   previewPanel: {
     borderRadius: 12,
@@ -823,41 +768,10 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: '#1a1a2e',
   },
-  resultPanel: {
-    minHeight: 108,
-    borderRadius: 16,
-    backgroundColor: '#f3f5fb',
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  resultWarn: {
-    backgroundColor: '#fef9f0',
-  },
-  resultSuccess: {
-    backgroundColor: '#eafaf1',
-  },
-  resultLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: '#61708a',
-  },
-  resultLabelWarn: {
-    color: '#e67e22',
-  },
-  resultLabelSuccess: {
-    color: '#27ae60',
-  },
-  resultText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#61708a',
-    textAlign: 'center',
-    marginTop: 8,
+  gesturePadSlot: {
+    flex: 1,
+    minHeight: 200,
+    marginBottom: 14,
   },
   actionGrid: {
     flexDirection: 'row',
@@ -865,7 +779,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 12,
     columnGap: 12,
-    marginTop: 16,
   },
   secondaryButton: {
     width: '48%',

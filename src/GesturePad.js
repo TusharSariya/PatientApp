@@ -36,6 +36,8 @@ function summarizeTouches(touches, layout) {
 
 export default function GesturePad({
   disabled = false,
+  fill = false,
+  padHeight,
   resetKey = 0,
   onGestureChange,
   onGestureComplete,
@@ -104,13 +106,16 @@ export default function GesturePad({
     return index % stride === 0 || index === rawPoints.length - 1;
   });
 
-  const currentTouches = rawPoints[rawPoints.length - 1]?.touches ?? 0;
-  const maxTouches = rawPoints.reduce((highest, point) => Math.max(highest, point.touches), 0);
-
   return (
-    <View>
+    <View style={fill ? styles.rootFill : null}>
       <View
-        style={[styles.pad, disabled && styles.padDisabled, isDrawing && styles.padActive]}
+        style={[
+          styles.pad,
+          fill ? styles.padFill : styles.padDefaultHeight,
+          Number.isFinite(padHeight) ? { height: padHeight } : null,
+          disabled && styles.padDisabled,
+          isDrawing && styles.padActive,
+        ]}
         onLayout={event => setLayout(event.nativeEvent.layout)}
         onStartShouldSetResponder={() => !disabled}
         onMoveShouldSetResponder={() => !disabled}
@@ -148,27 +153,28 @@ export default function GesturePad({
           />
         ))}
       </View>
-
-      <Text style={styles.status}>
-        {rawPoints.length === 0
-          ? 'The recognizer records the finger path, finger count, and finger spread.'
-          : isDrawing
-            ? `Drawing with ${currentTouches} finger${currentTouches === 1 ? '' : 's'}...`
-            : `Captured ${rawPoints.length} samples${maxTouches ? ` using up to ${maxTouches} finger${maxTouches === 1 ? '' : 's'}` : ''}.`}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootFill: {
+    flex: 1,
+  },
   pad: {
-    height: 240,
     borderRadius: 18,
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: '#d4dbff',
     backgroundColor: '#f8f9ff',
     overflow: 'hidden',
+  },
+  padDefaultHeight: {
+    height: 240,
+  },
+  padFill: {
+    flex: 1,
+    minHeight: 200,
   },
   padDisabled: {
     opacity: 0.6,
@@ -205,12 +211,5 @@ const styles = StyleSheet.create({
   },
   dotMulti: {
     backgroundColor: '#ff7a59',
-  },
-  status: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#7d8597',
-    marginTop: 10,
-    textAlign: 'center',
   },
 });
