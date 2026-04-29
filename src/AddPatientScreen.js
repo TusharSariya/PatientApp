@@ -11,17 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { addPatient } from './database';
-import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
+import { useGestureTextInput } from './GestureInputProvider';
 import { formatPatientNameParts } from './patientName';
-
-function FieldLabel({ children, onGesturePress }) {
-  return (
-    <View style={styles.labelRow}>
-      <Text style={styles.label}>{children}</Text>
-      <GestureTriggerButton onPress={onGesturePress} />
-    </View>
-  );
-}
 
 export default function AddPatientScreen() {
   const [firstName, setFirstName] = useState('');
@@ -33,7 +24,6 @@ export default function AddPatientScreen() {
   const firstNameInput = useGestureTextInput({ label: 'First Name', value: firstName, setValue: setFirstName });
   const middleNameInput = useGestureTextInput({ label: 'Middle Name', value: middleName, setValue: setMiddleName });
   const lastNameInput = useGestureTextInput({ label: 'Last Name', value: lastName, setValue: setLastName });
-  const phoneInput = useGestureTextInput({ label: 'Phone Number', value: phone, setValue: setPhone });
   const addressInput = useGestureTextInput({ label: 'Address', value: address, setValue: setAddress });
 
   async function handleSave() {
@@ -66,7 +56,7 @@ export default function AddPatientScreen() {
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>New Patient</Text>
 
-        <FieldLabel onGesturePress={firstNameInput.openGestureInput}>First Name</FieldLabel>
+        <Text style={styles.label}>First Name</Text>
         <TextInput
           ref={firstNameInput.ref}
           style={styles.input}
@@ -81,7 +71,7 @@ export default function AddPatientScreen() {
           autoCapitalize="words"
         />
 
-        <FieldLabel onGesturePress={middleNameInput.openGestureInput}>Middle Name</FieldLabel>
+        <Text style={styles.label}>Middle Name</Text>
         <TextInput
           ref={middleNameInput.ref}
           style={styles.input}
@@ -96,7 +86,7 @@ export default function AddPatientScreen() {
           autoCapitalize="words"
         />
 
-        <FieldLabel onGesturePress={lastNameInput.openGestureInput}>Last Name</FieldLabel>
+        <Text style={styles.label}>Last Name</Text>
         <TextInput
           ref={lastNameInput.ref}
           style={styles.input}
@@ -111,22 +101,16 @@ export default function AddPatientScreen() {
           autoCapitalize="words"
         />
 
-        <FieldLabel onGesturePress={phoneInput.openGestureInput}>Phone Number</FieldLabel>
+        <Text style={styles.label}>Phone Number</Text>
         <TextInput
-          ref={phoneInput.ref}
           style={styles.input}
           placeholder="e.g. 555-123-4567"
           value={phone}
           onChangeText={setPhone}
-          showSoftInputOnFocus={phoneInput.showSoftInputOnFocus}
-          onFocus={phoneInput.onFocus}
-          onBlur={phoneInput.onBlur}
-          onSelectionChange={phoneInput.onSelectionChange}
-          selection={phoneInput.selection}
           keyboardType="phone-pad"
         />
 
-        <FieldLabel onGesturePress={addressInput.openGestureInput}>Address</FieldLabel>
+        <Text style={styles.label}>Address</Text>
         <TextInput
           ref={addressInput.ref}
           style={[styles.input, styles.multiline]}
@@ -165,19 +149,13 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     color: '#1a1a2e',
   },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-    gap: 12,
-  },
   label: {
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 6,
   },
   input: {
     borderWidth: 1,

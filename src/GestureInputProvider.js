@@ -577,14 +577,6 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
   };
 }
 
-export function GestureTriggerButton({ onPress, title = 'Use Gesture', style }) {
-  return (
-    <TouchableOpacity style={[styles.gestureTrigger, style]} onPress={onPress} activeOpacity={0.82}>
-      <Text style={styles.gestureTriggerText}>{title}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -741,19 +733,5 @@ const styles = StyleSheet.create({
   },
   buttonTextDisabled: {
     color: '#9facdb',
-  },
-  gestureTrigger: {
-    borderWidth: 1,
-    borderColor: '#cfd6fb',
-    backgroundColor: '#eef2ff',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  gestureTriggerText: {
-    color: '#4f6ef7',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
 });

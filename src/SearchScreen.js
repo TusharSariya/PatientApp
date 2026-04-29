@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { searchPatients, getAllPatients } from './database';
-import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
+import { useGestureTextInput } from './GestureInputProvider';
 
 function PatientCard({ patient, onPress }) {
   return (
@@ -24,10 +24,7 @@ function PatientCard({ patient, onPress }) {
 function SearchField({ label, value, onChangeText, input, placeholder }) {
   return (
     <View style={styles.fieldGroup}>
-      <View style={styles.searchRow}>
-        <Text style={styles.searchLabel}>{label}</Text>
-        <GestureTriggerButton onPress={input.openGestureInput} />
-      </View>
+      <Text style={styles.searchLabel}>{label}</Text>
       <TextInput
         ref={input.ref}
         style={styles.searchInput}
@@ -176,19 +173,13 @@ const styles = StyleSheet.create({
   fieldGroup: {
     marginBottom: 14,
   },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 6,
-  },
   searchLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 6,
   },
   searchInput: {
     borderWidth: 1,

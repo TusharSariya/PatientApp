@@ -19,7 +19,7 @@ import {
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 import { getMedicines, addMedicine, deleteMedicine } from './database';
-import { GestureTriggerButton, useGestureTextInput } from './GestureInputProvider';
+import { useGestureTextInput } from './GestureInputProvider';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 
@@ -134,15 +134,11 @@ const Field = React.forwardRef(({
   onSelectionChange,
   selection,
   showSoftInputOnFocus,
-  onGesturePress,
   multiline,
   keyboardType,
 }, ref) => (
   <View style={styles.fieldGroup}>
-    <View style={styles.fieldHeader}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <GestureTriggerButton onPress={onGesturePress} />
-    </View>
+    <Text style={styles.fieldLabel}>{label}</Text>
     <TextInput
       ref={ref}
       style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
@@ -363,10 +359,6 @@ export default function PatientDetailScreen({ route }) {
               onSelectionChange={f.input.onSelectionChange}
               selection={f.input.selection}
               showSoftInputOnFocus={f.input.showSoftInputOnFocus}
-              onGesturePress={() => {
-                activeIndexRef.current = i;
-                f.input.openGestureInput();
-              }}
               multiline={f.multiline}
             />
           ))}
@@ -398,13 +390,7 @@ export default function PatientDetailScreen({ route }) {
             {rxFields.map((f, i) =>
               f.label === 'Weight' ? (
                 <View key={f.label} style={styles.fieldGroup}>
-                  <View style={styles.fieldHeader}>
-                    <Text style={styles.fieldLabel}>Weight</Text>
-                    <GestureTriggerButton onPress={() => {
-                      activeIndexRef.current = i;
-                      f.input.openGestureInput();
-                    }} />
-                  </View>
+                  <Text style={styles.fieldLabel}>Weight</Text>
                   <View style={styles.weightRow}>
                     <TextInput
                       ref={f.ref}
@@ -447,10 +433,6 @@ export default function PatientDetailScreen({ route }) {
                   onSelectionChange={f.input.onSelectionChange}
                   selection={f.input.selection}
                   showSoftInputOnFocus={f.input.showSoftInputOnFocus}
-                  onGesturePress={() => {
-                    activeIndexRef.current = i;
-                    f.input.openGestureInput();
-                  }}
                   multiline={f.multiline}
                   keyboardType={f.keyboardType}
                 />
@@ -511,10 +493,7 @@ export default function PatientDetailScreen({ route }) {
         title="Add Medicine"
       >
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <View style={styles.fieldHeader}>
-            <Text style={styles.fieldLabel}>Name *</Text>
-            <GestureTriggerButton onPress={medNameInput.openGestureInput} />
-          </View>
+          <Text style={styles.fieldLabel}>Name *</Text>
           <TextInput
             ref={medNameInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
@@ -530,10 +509,7 @@ export default function PatientDetailScreen({ route }) {
             autoCapitalize="words"
           />
 
-          <View style={styles.fieldHeader}>
-            <Text style={styles.fieldLabel}>Dosage</Text>
-            <GestureTriggerButton onPress={medDosageInput.openGestureInput} />
-          </View>
+          <Text style={styles.fieldLabel}>Dosage</Text>
           <TextInput
             ref={medDosageInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
@@ -548,10 +524,7 @@ export default function PatientDetailScreen({ route }) {
             placeholderTextColor="#bbb"
           />
 
-          <View style={styles.fieldHeader}>
-            <Text style={styles.fieldLabel}>Frequency</Text>
-            <GestureTriggerButton onPress={medFrequencyInput.openGestureInput} />
-          </View>
+          <Text style={styles.fieldLabel}>Frequency</Text>
           <TextInput
             ref={medFrequencyInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
@@ -566,10 +539,7 @@ export default function PatientDetailScreen({ route }) {
             placeholderTextColor="#bbb"
           />
 
-          <View style={styles.fieldHeader}>
-            <Text style={styles.fieldLabel}>Duration</Text>
-            <GestureTriggerButton onPress={medDurationInput.openGestureInput} />
-          </View>
+          <Text style={styles.fieldLabel}>Duration</Text>
           <TextInput
             ref={medDurationInput.ref}
             style={[styles.fieldInput, { marginBottom: 16 }]}
@@ -597,10 +567,7 @@ export default function PatientDetailScreen({ route }) {
             ))}
           </View>
 
-          <View style={styles.fieldHeader}>
-            <Text style={styles.fieldLabel}>Instructions</Text>
-            <GestureTriggerButton onPress={medInstructionsInput.openGestureInput} />
-          </View>
+          <Text style={styles.fieldLabel}>Instructions</Text>
           <TextInput
             ref={medInstructionsInput.ref}
             style={[styles.fieldInput, styles.fieldInputMultiline, { marginBottom: 24 }]}
@@ -690,19 +657,13 @@ const styles = StyleSheet.create({
   fieldGroup: {
     marginBottom: 20,
   },
-  fieldHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 6,
-  },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 6,
   },
   fieldInput: {
     backgroundColor: '#fff',

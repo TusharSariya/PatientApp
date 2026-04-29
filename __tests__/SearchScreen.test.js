@@ -58,4 +58,11 @@ describe('SearchScreen', () => {
       patient: BASE_PATIENTS[0],
     });
   });
+
+  test('does not render manual gesture buttons for search fields', async () => {
+    render(<SearchScreen navigation={{ navigate: jest.fn() }} />);
+    await waitFor(() => expect(getAllPatients).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByText('Use Gesture')).toBeNull();
+  });
 });

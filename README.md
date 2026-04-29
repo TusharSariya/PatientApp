@@ -15,9 +15,14 @@ A React Native app (Expo) for managing patient records on-device. Stores first, 
    - [Option A: Expo Go (quickest)](#option-a-expo-go-quickest)
    - [Option B: iOS Simulator (macOS only)](#option-b-ios-simulator-macos-only)
    - [Option C: Android Emulator](#option-c-android-emulator)
-3. [Building & Releasing an APK](#building--releasing-an-apk)
-4. [Project Structure](#project-structure)
-5. [Troubleshooting](#troubleshooting)
+3. [Running Tests](#running-tests)
+   - [Run all tests once](#run-all-tests-once)
+   - [Watch mode](#watch-mode)
+   - [Coverage report](#coverage-report)
+   - [Run a single test file](#run-a-single-test-file)
+4. [Building & Releasing an APK](#building--releasing-an-apk)
+5. [Project Structure](#project-structure)
+6. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -182,6 +187,40 @@ No simulator or emulator needed. Runs on your real phone.
    npm run android
    # or: npx expo start, then press 'a'
    ```
+
+---
+
+## Running Tests
+
+Tests are configured with **Jest** using Expo's preset (`jest-expo`) and React Native Testing Library.
+
+### Run all tests once
+
+```bash
+npm test
+```
+
+### Watch mode
+
+```bash
+npm run test:watch
+```
+
+### Coverage report
+
+```bash
+npm run test:coverage
+```
+
+This generates a local coverage report in `coverage/`.
+
+### Run a single test file
+
+```bash
+npx jest __tests__/GestureInputProvider.test.js
+```
+
+You can replace the file path with any test file in `__tests__/`.
 
 ---
 

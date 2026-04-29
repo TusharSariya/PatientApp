@@ -33,6 +33,12 @@ describe('AddPatientScreen', () => {
     expect(addPatient).not.toHaveBeenCalled();
   });
 
+  test('does not render manual gesture buttons for text fields', () => {
+    render(<AddPatientScreen />);
+
+    expect(screen.queryByText('Use Gesture')).toBeNull();
+  });
+
   test('saves patient with trimmed values and resets form', async () => {
     addPatient.mockResolvedValueOnce(11);
 
