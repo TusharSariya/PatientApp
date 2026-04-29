@@ -19,6 +19,27 @@ import {
 } from 'expo-speech-recognition';
 import { useGestureTextInput } from './GestureInputProvider';
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(value, max));
+}
+
+function insertDictationAtSelection(currentValue, selection, transcript) {
+  const source = currentValue ?? '';
+  const phrase = transcript ?? '';
+  const start = clamp(selection?.start ?? source.length, 0, source.length);
+  const end = clamp(selection?.end ?? start, start, source.length);
+  const before = source.slice(0, start);
+  const after = source.slice(end);
+  const needsLeadingSpace = before.length > 0 && !/\s$/.test(before) && !/^\s/.test(phrase);
+  const needsTrailingSpace = after.length > 0 && !/^\s/.test(after) && !/\s$/.test(phrase);
+  const inserted = `${needsLeadingSpace ? ' ' : ''}${phrase}${needsTrailingSpace ? ' ' : ''}`;
+
+  return {
+    value: `${before}${inserted}${after}`,
+    cursor: before.length + inserted.length,
+  };
+}
+
 function composeHandlers(...handlers) {
   return (...args) => {
     handlers.forEach(handler => handler?.(...args));
@@ -116,6 +137,7 @@ export default function PatientDetailScreen({ route, navigation }) {
 
   const activeIndexRef = useRef(0);
   const shouldAdvanceRef = useRef(false);
+  const lastTranscriptRef = useRef('');
   const fabBottom = useRef(new Animated.Value(32)).current;
 
   React.useEffect(() => {
@@ -157,8 +179,12 @@ export default function PatientDetailScreen({ route, navigation }) {
 
   const currentFields = activeTab === 'Personal' ? personalFields : rxFields;
 
-  useSpeechRecognitionEvent('start', () => setRecognizing(true));
+  useSpeechRecognitionEvent('start', () => {
+    lastTranscriptRef.current = '';
+    setRecognizing(true);
+  });
   useSpeechRecognitionEvent('end', () => {
+    lastTranscriptRef.current = '';
     setRecognizing(false);
     if (shouldAdvanceRef.current) {
       shouldAdvanceRef.current = false;
@@ -168,9 +194,21 @@ export default function PatientDetailScreen({ route, navigation }) {
     }
   });
   useSpeechRecognitionEvent('result', (event) => {
-    const text = event.results[0]?.transcript ?? '';
+    const text = (event.results[0]?.transcript ?? '').trim();
     const field = currentFields[activeIndexRef.current];
-    if (text && field) field.setter(text);
+    if (!text || !field) return;
+
+    if (text === lastTranscriptRef.current) return;
+    let chunk = text;
+    if (text.startsWith(lastTranscriptRef.current)) {
+      chunk = text.slice(lastTranscriptRef.current.length).trimStart();
+    }
+    lastTranscriptRef.current = text;
+    if (!chunk) return;
+
+    const next = insertDictationAtSelection(field.value, field.input.selection, chunk);
+    field.setter(next.value);
+    field.input.setSelection?.({ start: next.cursor, end: next.cursor });
   });
   useSpeechRecognitionEvent('error', (event) => {
     Alert.alert('Dictation error', event.message ?? 'Something went wrong.');

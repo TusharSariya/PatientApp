@@ -628,9 +628,15 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
     return event;
   }
 
+  function handleSetSelection(nextSelection) {
+    selectionRef.current = nextSelection;
+    setSelection(nextSelection);
+  }
+
   return {
     ref: resolvedRef,
     selection,
+    setSelection: handleSetSelection,
     showSoftInputOnFocus,
     onFocus: handleFocus,
     onBlur: handleBlur,
