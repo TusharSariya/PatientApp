@@ -183,6 +183,7 @@ export default function PatientMedicinesScreen({ route }) {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.patientCard}>
           <Text style={styles.patientName}>{patient.name}</Text>
+          {patient.family_id ? <Text style={styles.patientDetail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
           <Text style={styles.patientDetail}>📞 {patient.phone}</Text>
           <Text style={styles.patientDetail}>📍 {patient.address}</Text>
         </View>

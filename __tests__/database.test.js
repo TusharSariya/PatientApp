@@ -8,6 +8,7 @@ function expectedPatientColumns() {
     { name: 'middle_name' },
     { name: 'last_name' },
     { name: 'dob' },
+    { name: 'family_id' },
   ];
 }
 
@@ -51,17 +52,44 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS gestures'));
   });
 
-  test('addPatient inserts trimmed name parts and returns row id', async () => {
+  test('addPatient inserts patient and uses existing family id when provided', async () => {
     const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('SELECT id FROM families WHERE id = ?')) {
+        return { id: params[0] };
+      }
+      return { count: 0 };
+    });
     db.runAsync.mockResolvedValueOnce({ lastInsertRowId: 77 });
     const { database } = await loadDatabaseModule({ dev: false, db });
 
-    const id = await database.addPatient('John', 'Q', 'Public', '2000-01-01', '555', '1 Main');
+    const result = await database.addPatient('John', 'Q', 'Public', '2000-01-01', '555', '1 Main', '12');
 
-    expect(id).toBe(77);
+    expect(result).toEqual({ patientId: 77, familyId: 12, createdNewFamily: false });
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO patients'),
-      ['John', 'Q', 'Public', '2000-01-01', '555', '1 Main']
+      ['John', 'Q', 'Public', '2000-01-01', 12, '555', '1 Main']
+    );
+  });
+
+  test('addPatient creates a new family when no family id is provided', async () => {
+    const db = createMockDb();
+    db.runAsync
+      .mockResolvedValueOnce({ lastInsertRowId: 45, changes: 1 })
+      .mockResolvedValueOnce({ lastInsertRowId: 88, changes: 1 });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const result = await database.addPatient('Jane', '', 'Public', '1999-12-31', '555', '2 Main', '');
+
+    expect(result).toEqual({ patientId: 88, familyId: 45, createdNewFamily: true });
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('INSERT INTO families')
+    );
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('INSERT INTO patients'),
+      ['Jane', '', 'Public', '1999-12-31', 45, '555', '2 Main']
     );
   });
 

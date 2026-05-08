@@ -36,6 +36,7 @@ const PATIENT_SELECT_SQL = `
     middle_name,
     last_name,
     dob,
+    family_id,
     phone,
     address,
     ${PATIENT_NAME_SQL} AS name
@@ -61,6 +62,7 @@ async function migratePatientsTable(database) {
       middle_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL,
       dob TEXT NOT NULL DEFAULT '',
+      family_id INTEGER,
       phone TEXT NOT NULL,
       address TEXT NOT NULL
     );
@@ -73,8 +75,8 @@ async function migratePatientsTable(database) {
     const lastName = row.last_name?.trim?.() || parsed.lastName;
 
     await database.runAsync(
-      'INSERT INTO patients (id, first_name, middle_name, last_name, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [row.id, firstName, middleName, lastName, row.dob ?? '', row.phone ?? '', row.address ?? '']
+      'INSERT INTO patients (id, first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [row.id, firstName, middleName, lastName, row.dob ?? '', row.family_id ?? null, row.phone ?? '', row.address ?? '']
     );
   }
 
@@ -100,6 +102,32 @@ async function ensurePatientsDobColumn(database) {
   const columnNames = new Set(columns.map(column => column.name));
   if (!columnNames.has('dob')) {
     await database.execAsync("ALTER TABLE patients ADD COLUMN dob TEXT NOT NULL DEFAULT '';");
+  }
+}
+
+async function ensureFamiliesSchema(database) {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS families (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
+
+async function ensurePatientsFamilyColumn(database) {
+  const columns = await database.getAllAsync('PRAGMA table_info(patients)');
+  const columnNames = new Set(columns.map(column => column.name));
+  if (!columnNames.has('family_id')) {
+    await database.execAsync('ALTER TABLE patients ADD COLUMN family_id INTEGER;');
+  }
+}
+
+async function ensurePatientFamilyAssignments(database) {
+  const rows = await database.getAllAsync('SELECT id, family_id FROM patients ORDER BY id ASC');
+  for (const row of rows) {
+    if (row.family_id != null) continue;
+    const familyInsert = await database.runAsync('INSERT INTO families DEFAULT VALUES');
+    await database.runAsync('UPDATE patients SET family_id = ? WHERE id = ?', [familyInsert.lastInsertRowId, row.id]);
   }
 }
 
@@ -141,12 +169,17 @@ export async function getDb() {
     db = await SQLite.openDatabaseAsync('patients.db');
     console.log('[db] opened');
     await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS families (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
       CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT NOT NULL,
         middle_name TEXT NOT NULL DEFAULT '',
         last_name TEXT NOT NULL,
         dob TEXT NOT NULL DEFAULT '',
+        family_id INTEGER,
         phone TEXT NOT NULL,
         address TEXT NOT NULL
       );
@@ -182,6 +215,9 @@ export async function getDb() {
 
     await ensurePatientsSchema(db);
     await ensurePatientsDobColumn(db);
+    await ensureFamiliesSchema(db);
+    await ensurePatientsFamilyColumn(db);
+    await ensurePatientFamilyAssignments(db);
     await ensureMedicineHistoryBackfill(db);
 
     if (__DEV__) {
@@ -191,9 +227,10 @@ export async function getDb() {
       if (patientCount === 0) {
         let aliceId;
         for (const p of MOCK_PATIENTS) {
+          const familyInsert = await db.runAsync('INSERT INTO families DEFAULT VALUES');
           const result = await db.runAsync(
-            'INSERT INTO patients (first_name, middle_name, last_name, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
-            [p.firstName, p.middleName, p.lastName, p.dob ?? '', p.phone, p.address]
+            'INSERT INTO patients (first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [p.firstName, p.middleName, p.lastName, p.dob ?? '', familyInsert.lastInsertRowId, p.phone, p.address]
           );
           if (p.firstName === 'Alice' && p.lastName === 'Johnson') aliceId = result.lastInsertRowId;
         }
@@ -213,13 +250,97 @@ export async function getDb() {
   return db;
 }
 
-export async function addPatient(firstName, middleName, lastName, dob, phone, address) {
+function normalizeFamilyIdInput(familyId) {
+  const raw = `${familyId ?? ''}`.trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error('Family ID must be a positive integer.');
+  }
+  return parsed;
+}
+
+export async function addPatient(firstName, middleName, lastName, dob, phone, address, familyId) {
   const database = await getDb();
+  const requestedFamilyId = normalizeFamilyIdInput(familyId);
+  let resolvedFamilyId = requestedFamilyId;
+  let createdNewFamily = false;
+
+  if (requestedFamilyId != null) {
+    const existingFamily = await database.getFirstAsync('SELECT id FROM families WHERE id = ?', [requestedFamilyId]);
+    if (!existingFamily) {
+      throw new Error(`Family ID ${requestedFamilyId} does not exist.`);
+    }
+  } else {
+    const familyInsert = await database.runAsync('INSERT INTO families DEFAULT VALUES');
+    resolvedFamilyId = familyInsert.lastInsertRowId;
+    createdNewFamily = true;
+  }
+
   const result = await database.runAsync(
-    'INSERT INTO patients (first_name, middle_name, last_name, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
-    [firstName, middleName ?? '', lastName, dob ?? '', phone, address]
+    'INSERT INTO patients (first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [firstName, middleName ?? '', lastName, dob ?? '', resolvedFamilyId, phone, address]
   );
-  return result.lastInsertRowId;
+  return {
+    patientId: result.lastInsertRowId,
+    familyId: resolvedFamilyId,
+    createdNewFamily,
+  };
+}
+
+export async function searchFamiliesByRelativeName(query) {
+  const database = await getDb();
+  const normalized = (query ?? '').trim().toLowerCase();
+  if (!normalized) return [];
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const whereClauses = tokens.map(() => `lower(${PATIENT_NAME_SQL}) LIKE ?`);
+  const whereParams = tokens.map(token => `%${token}%`);
+
+  return await database.getAllAsync(
+    `
+      WITH matched AS (
+        SELECT
+          family_id AS familyId,
+          ${PATIENT_NAME_SQL} AS relativeName,
+          lower(${PATIENT_NAME_SQL}) AS relativeNameLower
+        FROM patients
+        WHERE family_id IS NOT NULL
+          AND ${whereClauses.join(' AND ')}
+      ),
+      ranked AS (
+        SELECT
+          familyId,
+          MIN(relativeName) AS relativeName,
+          MIN(
+            CASE
+              WHEN relativeNameLower = ? THEN 0
+              WHEN relativeNameLower LIKE ? THEN 1
+              ELSE 2
+            END
+          ) AS score
+        FROM matched
+        GROUP BY familyId
+      )
+      SELECT
+        r.familyId AS family_id,
+        r.relativeName AS relative_name,
+        (
+          SELECT COUNT(*)
+          FROM patients p2
+          WHERE p2.family_id = r.familyId
+        ) AS member_count
+      FROM ranked r
+      ORDER BY
+        r.score ASC,
+        member_count DESC,
+        r.familyId ASC
+      LIMIT 12
+    `,
+    [...whereParams, normalized, `${normalized}%`]
+  );
 }
 
 export async function searchPatients({ firstName = '', middleName = '', lastName = '' }) {
