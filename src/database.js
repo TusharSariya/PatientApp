@@ -4,9 +4,9 @@ import { splitPatientName } from './patientName';
 let db;
 
 const MOCK_PATIENTS = [
-  { firstName: 'Alice', middleName: 'Marie', lastName: 'Johnson', phone: '555-101-2020', address: '12 Maple Ave, Springfield, IL' },
-  { firstName: 'Bob', middleName: '', lastName: 'Martinez', phone: '555-303-4040', address: '88 Oak Street, Shelbyville, IL' },
-  { firstName: 'Carol', middleName: 'Anh', lastName: 'Nguyen', phone: '555-505-6060', address: '4 Elm Court, Capital City, IL' },
+  { firstName: 'Alice', middleName: 'Marie', lastName: 'Johnson', dob: '1990-02-14', phone: '555-101-2020', address: '12 Maple Ave, Springfield, IL' },
+  { firstName: 'Bob', middleName: '', lastName: 'Martinez', dob: '1985-08-23', phone: '555-303-4040', address: '88 Oak Street, Shelbyville, IL' },
+  { firstName: 'Carol', middleName: 'Anh', lastName: 'Nguyen', dob: '1993-11-05', phone: '555-505-6060', address: '4 Elm Court, Capital City, IL' },
 ];
 
 const ALICE_MEDICINES = [
@@ -35,6 +35,7 @@ const PATIENT_SELECT_SQL = `
     first_name,
     middle_name,
     last_name,
+    dob,
     phone,
     address,
     ${PATIENT_NAME_SQL} AS name
@@ -59,6 +60,7 @@ async function migratePatientsTable(database) {
       first_name TEXT NOT NULL,
       middle_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL,
+      dob TEXT NOT NULL DEFAULT '',
       phone TEXT NOT NULL,
       address TEXT NOT NULL
     );
@@ -71,8 +73,8 @@ async function migratePatientsTable(database) {
     const lastName = row.last_name?.trim?.() || parsed.lastName;
 
     await database.runAsync(
-      'INSERT INTO patients (id, first_name, middle_name, last_name, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
-      [row.id, firstName, middleName, lastName, row.phone ?? '', row.address ?? '']
+      'INSERT INTO patients (id, first_name, middle_name, last_name, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [row.id, firstName, middleName, lastName, row.dob ?? '', row.phone ?? '', row.address ?? '']
     );
   }
 
@@ -90,6 +92,14 @@ async function ensurePatientsSchema(database) {
 
   if (!hasExpectedColumns) {
     await migratePatientsTable(database);
+  }
+}
+
+async function ensurePatientsDobColumn(database) {
+  const columns = await database.getAllAsync('PRAGMA table_info(patients)');
+  const columnNames = new Set(columns.map(column => column.name));
+  if (!columnNames.has('dob')) {
+    await database.execAsync("ALTER TABLE patients ADD COLUMN dob TEXT NOT NULL DEFAULT '';");
   }
 }
 
@@ -136,6 +146,7 @@ export async function getDb() {
         first_name TEXT NOT NULL,
         middle_name TEXT NOT NULL DEFAULT '',
         last_name TEXT NOT NULL,
+        dob TEXT NOT NULL DEFAULT '',
         phone TEXT NOT NULL,
         address TEXT NOT NULL
       );
@@ -170,6 +181,7 @@ export async function getDb() {
     `);
 
     await ensurePatientsSchema(db);
+    await ensurePatientsDobColumn(db);
     await ensureMedicineHistoryBackfill(db);
 
     if (__DEV__) {
@@ -180,8 +192,8 @@ export async function getDb() {
         let aliceId;
         for (const p of MOCK_PATIENTS) {
           const result = await db.runAsync(
-            'INSERT INTO patients (first_name, middle_name, last_name, phone, address) VALUES (?, ?, ?, ?, ?)',
-            [p.firstName, p.middleName, p.lastName, p.phone, p.address]
+            'INSERT INTO patients (first_name, middle_name, last_name, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
+            [p.firstName, p.middleName, p.lastName, p.dob ?? '', p.phone, p.address]
           );
           if (p.firstName === 'Alice' && p.lastName === 'Johnson') aliceId = result.lastInsertRowId;
         }
@@ -201,11 +213,11 @@ export async function getDb() {
   return db;
 }
 
-export async function addPatient(firstName, middleName, lastName, phone, address) {
+export async function addPatient(firstName, middleName, lastName, dob, phone, address) {
   const database = await getDb();
   const result = await database.runAsync(
-    'INSERT INTO patients (first_name, middle_name, last_name, phone, address) VALUES (?, ?, ?, ?, ?)',
-    [firstName, middleName ?? '', lastName, phone, address]
+    'INSERT INTO patients (first_name, middle_name, last_name, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
+    [firstName, middleName ?? '', lastName, dob ?? '', phone, address]
   );
   return result.lastInsertRowId;
 }

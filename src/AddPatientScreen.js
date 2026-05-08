@@ -18,12 +18,14 @@ export default function AddPatientScreen() {
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [dob, setDob] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const firstNameInput = useGestureTextInput({ label: 'First Name', value: firstName, setValue: setFirstName });
   const middleNameInput = useGestureTextInput({ label: 'Middle Name', value: middleName, setValue: setMiddleName });
   const lastNameInput = useGestureTextInput({ label: 'Last Name', value: lastName, setValue: setLastName });
+  const dobInput = useGestureTextInput({ label: 'Date of Birth', value: dob, setValue: setDob });
   const addressInput = useGestureTextInput({ label: 'Address', value: address, setValue: setAddress });
 
   async function handleSave() {
@@ -34,11 +36,12 @@ export default function AddPatientScreen() {
     setLoading(true);
     try {
       const fullName = formatPatientNameParts(firstName, middleName, lastName);
-      await addPatient(firstName.trim(), middleName.trim(), lastName.trim(), phone.trim(), address.trim());
+      await addPatient(firstName.trim(), middleName.trim(), lastName.trim(), dob.trim(), phone.trim(), address.trim());
       Alert.alert('Success', `${fullName} has been added.`);
       setFirstName('');
       setMiddleName('');
       setLastName('');
+      setDob('');
       setPhone('');
       setAddress('');
     } catch (e) {
@@ -108,6 +111,20 @@ export default function AddPatientScreen() {
           value={phone}
           onChangeText={setPhone}
           keyboardType="phone-pad"
+        />
+
+        <Text style={styles.label}>Date of Birth</Text>
+        <TextInput
+          ref={dobInput.ref}
+          style={styles.input}
+          placeholder="YYYY-MM-DD"
+          value={dob}
+          onChangeText={setDob}
+          showSoftInputOnFocus={dobInput.showSoftInputOnFocus}
+          onFocus={dobInput.onFocus}
+          onBlur={dobInput.onBlur}
+          onSelectionChange={dobInput.onSelectionChange}
+          selection={dobInput.selection}
         />
 
         <Text style={styles.label}>Address</Text>

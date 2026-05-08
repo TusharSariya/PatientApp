@@ -259,6 +259,7 @@ export default function PatientDetailScreen({ route, navigation }) {
         <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
           <View style={styles.infoCard}>
             <Text style={styles.name}>{patient.name}</Text>
+            {patient.dob ? <Text style={styles.detail}>🎂 {patient.dob}</Text> : null}
             <Text style={styles.detail}>📞 {patient.phone}</Text>
             <Text style={styles.detail}>📍 {patient.address}</Text>
           </View>

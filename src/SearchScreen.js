@@ -15,6 +15,7 @@ function PatientCard({ patient, onPress }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
       <Text style={styles.cardName}>{patient.name}</Text>
+      {patient.dob ? <Text style={styles.cardDetail}>🎂 {patient.dob}</Text> : null}
       <Text style={styles.cardDetail}>📞 {patient.phone}</Text>
       <Text style={styles.cardDetail}>📍 {patient.address}</Text>
     </TouchableOpacity>

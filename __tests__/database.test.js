@@ -7,6 +7,7 @@ function expectedPatientColumns() {
     { name: 'first_name' },
     { name: 'middle_name' },
     { name: 'last_name' },
+    { name: 'dob' },
   ];
 }
 
@@ -55,12 +56,12 @@ describe('database', () => {
     db.runAsync.mockResolvedValueOnce({ lastInsertRowId: 77 });
     const { database } = await loadDatabaseModule({ dev: false, db });
 
-    const id = await database.addPatient('John', 'Q', 'Public', '555', '1 Main');
+    const id = await database.addPatient('John', 'Q', 'Public', '2000-01-01', '555', '1 Main');
 
     expect(id).toBe(77);
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO patients'),
-      ['John', 'Q', 'Public', '555', '1 Main']
+      ['John', 'Q', 'Public', '2000-01-01', '555', '1 Main']
     );
   });
 
