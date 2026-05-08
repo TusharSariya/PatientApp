@@ -226,6 +226,123 @@ async function ensureVisitColumns(database) {
   }
 }
 
+async function insertSeedVisitWithMedicines(database, {
+  patientId,
+  visitDate,
+  complaints,
+  diagnosis,
+  investigations,
+  procedures,
+  findings,
+  bp,
+  weight,
+  weightUnit,
+  notes,
+  visitCost,
+  medicines,
+}) {
+  const visitInsert = await database.runAsync(
+    `
+      INSERT INTO visits (
+        patient_id,
+        visit_date,
+        complaints,
+        diagnosis,
+        investigations,
+        procedures,
+        findings,
+        bp,
+        weight,
+        weight_unit,
+        notes,
+        visit_cost
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [patientId, visitDate, complaints, diagnosis, investigations, procedures, findings, bp, weight, weightUnit, notes, visitCost]
+  );
+  const visitId = visitInsert.lastInsertRowId;
+
+  for (const med of medicines) {
+    await database.runAsync(
+      'INSERT INTO visit_medicines (visit_id, patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [visitId, patientId, med.name, med.dosage ?? '', med.frequency ?? '', med.duration ?? '', med.route ?? '', med.instructions ?? '']
+    );
+    const medInsert = await database.runAsync(
+      'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [patientId, med.name, med.dosage ?? '', med.frequency ?? '', med.duration ?? '', med.route ?? '', med.instructions ?? '']
+    );
+    await database.runAsync(
+      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [patientId, medInsert.lastInsertRowId, med.name, med.dosage ?? '', med.frequency ?? '', med.duration ?? '', med.route ?? '', med.instructions ?? '', 'added']
+    );
+  }
+
+  return visitId;
+}
+
+async function ensureDevFamilyMockData(database) {
+  const visitsRow = await database.getFirstAsync('SELECT COUNT(*) AS count FROM visits');
+  if ((visitsRow?.count ?? 0) > 0) return;
+
+  const patients = await database.getAllAsync('SELECT id, family_id FROM patients ORDER BY id ASC LIMIT 2');
+  if (patients.length < 2) return;
+
+  const primary = patients[0];
+  const relative = patients[1];
+  const familyId = primary.family_id;
+  if (!familyId) return;
+
+  if (relative.family_id !== familyId) {
+    await database.runAsync('UPDATE patients SET family_id = ? WHERE id = ?', [familyId, relative.id]);
+  }
+
+  const visit1Id = await insertSeedVisitWithMedicines(database, {
+    patientId: primary.id,
+    visitDate: '2026-05-01',
+    complaints: 'Cough, fever',
+    diagnosis: 'Upper respiratory tract infection',
+    investigations: 'CBC, chest exam',
+    procedures: 'Nebulization',
+    findings: 'Mild wheeze',
+    bp: '118/76',
+    weight: '70',
+    weightUnit: 'kg',
+    notes: 'Hydration and follow-up in 1 week.',
+    visitCost: 180,
+    medicines: [
+      { name: 'Amoxicillin', dosage: '500mg', frequency: 'TID', duration: '7 days', route: 'Oral', instructions: 'After meals' },
+      { name: 'Paracetamol', dosage: '650mg', frequency: 'PRN', duration: '5 days', route: 'Oral', instructions: 'For fever' },
+    ],
+  });
+
+  const visit2Id = await insertSeedVisitWithMedicines(database, {
+    patientId: relative.id,
+    visitDate: '2026-05-03',
+    complaints: 'Headache',
+    diagnosis: 'Tension headache',
+    investigations: 'Blood pressure check',
+    procedures: '',
+    findings: 'No neuro deficit',
+    bp: '126/82',
+    weight: '82',
+    weightUnit: 'kg',
+    notes: 'Lifestyle advice provided.',
+    visitCost: 120,
+    medicines: [
+      { name: 'Ibuprofen', dosage: '400mg', frequency: 'BID', duration: '3 days', route: 'Oral', instructions: 'Take with food' },
+    ],
+  });
+
+  await database.runAsync(
+    'INSERT INTO payments (patient_id, family_id, visit_id, amount, scope) VALUES (?, ?, ?, ?, ?)',
+    [primary.id, familyId, visit1Id, 60, 'patient']
+  );
+  await database.runAsync(
+    'INSERT INTO payments (patient_id, family_id, visit_id, amount, scope) VALUES (?, ?, ?, ?, ?)',
+    [relative.id, familyId, visit2Id, 90, 'family']
+  );
+}
+
 export async function getDb() {
   if (!db) {
     console.log('[db] getDb: initializing, __DEV__=', __DEV__);
@@ -320,6 +437,9 @@ export async function getDb() {
     await ensureVisitsSchema(db);
     await ensureVisitColumns(db);
     await ensureMedicineHistoryBackfill(db);
+    if (__DEV__) {
+      await ensureDevFamilyMockData(db);
+    }
 
     if (__DEV__) {
       const row = await db.getFirstAsync('SELECT COUNT(*) AS count FROM patients');
@@ -346,6 +466,7 @@ export async function getDb() {
           );
         }
       }
+      await ensureDevFamilyMockData(db);
     }
   }
   return db;
