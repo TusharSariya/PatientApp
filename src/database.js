@@ -343,6 +343,24 @@ export async function searchFamiliesByRelativeName(query) {
   );
 }
 
+export async function updatePatient(patientId, { firstName, middleName, lastName, dob, phone, address }) {
+  const database = await getDb();
+  await database.runAsync(
+    `
+      UPDATE patients
+      SET
+        first_name = ?,
+        middle_name = ?,
+        last_name = ?,
+        dob = ?,
+        phone = ?,
+        address = ?
+      WHERE id = ?
+    `,
+    [firstName, middleName ?? '', lastName, dob ?? '', phone, address, patientId]
+  );
+}
+
 export async function searchPatients({ firstName = '', middleName = '', lastName = '' }) {
   const database = await getDb();
   const filters = [

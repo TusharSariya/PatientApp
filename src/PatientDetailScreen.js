@@ -232,6 +232,10 @@ export default function PatientDetailScreen({ route, navigation }) {
     navigation.navigate('PatientMedicines', { patient });
   }
 
+  function openEditPatient() {
+    navigation.navigate('EditPatient', { patient });
+  }
+
   async function handlePress() {
     if (recognizing) {
       shouldAdvanceRef.current = true;
@@ -264,6 +268,16 @@ export default function PatientDetailScreen({ route, navigation }) {
             <Text style={styles.detail}>📞 {patient.phone}</Text>
             <Text style={styles.detail}>📍 {patient.address}</Text>
           </View>
+
+          <TouchableOpacity style={styles.medCard} onPress={openEditPatient} activeOpacity={0.8}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.medTitle}>Patient Details</Text>
+              <Text style={styles.medSubtitle}>Open editable demographics and contact details.</Text>
+            </View>
+            <View style={styles.medButton}>
+              <Text style={styles.medButtonText}>Open</Text>
+            </View>
+          </TouchableOpacity>
           {personalFields.map((f, i) => (
             <Field
               key={f.label}

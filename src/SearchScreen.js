@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { searchPatients, getAllPatients } from './database';
 import { useGestureTextInput } from './GestureInputProvider';
 
@@ -83,6 +84,12 @@ export default function SearchScreen({ navigation }) {
   useEffect(() => {
     load({ firstName: '', middleName: '', lastName: '' });
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load({ firstName, middleName, lastName });
+    }, [load, firstName, middleName, lastName])
+  );
 
   function handleFirstNameChange(text) {
     setFirstName(text);

@@ -7,6 +7,7 @@ import HomeScreen from './src/HomeScreen';
 import AddPatientScreen from './src/AddPatientScreen';
 import SearchScreen from './src/SearchScreen';
 import PatientDetailScreen from './src/PatientDetailScreen';
+import EditPatientScreen from './src/EditPatientScreen';
 import PatientMedicinesScreen from './src/PatientMedicinesScreen';
 import SettingsScreen from './src/SettingsScreen';
 import ManageGesturesScreen from './src/ManageGesturesScreen';
@@ -46,6 +47,11 @@ export default function App() {
             name="PatientDetail"
             component={PatientDetailScreen}
             options={({ route }) => ({ title: route.params.patient.name })}
+          />
+          <Stack.Screen
+            name="EditPatient"
+            component={EditPatientScreen}
+            options={{ title: 'Edit Patient' }}
           />
           <Stack.Screen
             name="PatientMedicines"
