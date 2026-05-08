@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { addVisit, getVisitMedicines, getVisits } from './database';
+import { addVisit, getBalanceSummary, getVisitMedicines, getVisits } from './database';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 const EMPTY_MED = { name: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' };
@@ -25,10 +25,18 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatCurrency(value) {
+  return `$${Number(value ?? 0).toFixed(2)}`;
+}
+
 export default function PatientVisitsScreen({ route }) {
   const { patient } = route.params;
   const [visits, setVisits] = useState([]);
   const [visitMedicines, setVisitMedicines] = useState({});
+  const [balances, setBalances] = useState({
+    patientBalance: 0,
+    familyBalance: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [visitDate, setVisitDate] = useState(todayIsoDate());
@@ -43,6 +51,9 @@ export default function PatientVisitsScreen({ route }) {
   const [notes, setNotes] = useState('');
   const [draftMed, setDraftMed] = useState(EMPTY_MED);
   const [prescribedMeds, setPrescribedMeds] = useState([]);
+  const [visitCost, setVisitCost] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentScope, setPaymentScope] = useState('patient');
 
   const loadVisits = useCallback(async () => {
     setLoading(true);
@@ -51,6 +62,8 @@ export default function PatientVisitsScreen({ route }) {
       setVisits(rows);
       const medEntries = await Promise.all(rows.map(async (visit) => [visit.id, await getVisitMedicines(visit.id)]));
       setVisitMedicines(Object.fromEntries(medEntries));
+      const balanceSummary = await getBalanceSummary(patient.id);
+      setBalances(balanceSummary);
     } finally {
       setLoading(false);
     }
@@ -78,6 +91,10 @@ export default function PatientVisitsScreen({ route }) {
         weight: weight.trim(),
         weightUnit,
         notes: notes.trim(),
+        visitCost: visitCost.trim() || 0,
+        paymentAmount: paymentAmount.trim() || 0,
+        paymentScope,
+        familyId: patient.family_id,
         medicines: prescribedMeds,
       });
       setComplaints('');
@@ -91,6 +108,9 @@ export default function PatientVisitsScreen({ route }) {
       setNotes('');
       setPrescribedMeds([]);
       setDraftMed(EMPTY_MED);
+      setVisitCost('');
+      setPaymentAmount('');
+      setPaymentScope('patient');
       await loadVisits();
     } catch {
       Alert.alert('Error', 'Failed to create visit.');
@@ -124,6 +144,14 @@ export default function PatientVisitsScreen({ route }) {
         <View style={styles.patientCard}>
           <Text style={styles.patientName}>{patient.name}</Text>
           <Text style={styles.patientDetail}>Visits and encounter history</Text>
+          <View style={styles.balanceRow}>
+            <Text style={styles.balanceLabel}>Patient Balance:</Text>
+            <Text style={styles.balanceValue}>{formatCurrency(balances.patientBalance)}</Text>
+          </View>
+          <View style={styles.balanceRow}>
+            <Text style={styles.balanceLabel}>Family Balance:</Text>
+            <Text style={styles.balanceValue}>{formatCurrency(balances.familyBalance)}</Text>
+          </View>
         </View>
 
         <View style={styles.formCard}>
@@ -220,6 +248,41 @@ export default function PatientVisitsScreen({ route }) {
             placeholderTextColor="#bbb"
             multiline
           />
+          <Text style={styles.label}>Visit Cost</Text>
+          <TextInput
+            style={styles.input}
+            value={visitCost}
+            onChangeText={setVisitCost}
+            placeholder="e.g. 150"
+            placeholderTextColor="#bbb"
+            keyboardType="decimal-pad"
+          />
+          <Text style={styles.label}>Payment Amount</Text>
+          <TextInput
+            style={styles.input}
+            value={paymentAmount}
+            onChangeText={setPaymentAmount}
+            placeholder="e.g. 50"
+            placeholderTextColor="#bbb"
+            keyboardType="decimal-pad"
+          />
+          <Text style={styles.label}>Apply Payment To</Text>
+          <View style={styles.routeRow}>
+            {[
+              { id: 'patient', label: 'Patient Balance' },
+              { id: 'family', label: 'Family Balance' },
+            ].map((scopeOption) => (
+              <TouchableOpacity
+                key={scopeOption.id}
+                style={[styles.routeChip, paymentScope === scopeOption.id && styles.routeChipActive]}
+                onPress={() => setPaymentScope(scopeOption.id)}
+              >
+                <Text style={[styles.routeChipText, paymentScope === scopeOption.id && styles.routeChipTextActive]}>
+                  {scopeOption.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text style={styles.sectionTitleInline}>Prescribe Medicines</Text>
           <TextInput
@@ -306,6 +369,7 @@ export default function PatientVisitsScreen({ route }) {
               {visit.findings ? <Text style={styles.visitNotes}>Findings: {visit.findings}</Text> : null}
               {visit.bp ? <Text style={styles.visitNotes}>BP: {visit.bp}</Text> : null}
               {visit.weight ? <Text style={styles.visitNotes}>Weight: {visit.weight} {visit.weight_unit || 'kg'}</Text> : null}
+              <Text style={styles.visitNotes}>Visit Cost: {formatCurrency(visit.visit_cost)}</Text>
               {visit.notes ? <Text style={styles.visitNotes}>{visit.notes}</Text> : null}
               {(visitMedicines[visit.id] ?? []).length > 0 ? (
                 <Text style={styles.visitNotes}>Medicines: {(visitMedicines[visit.id] ?? []).map((med) => med.name).join(', ')}</Text>
@@ -342,6 +406,21 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: '#5f6d8a',
     fontSize: 14,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  balanceLabel: {
+    color: '#5f6d8a',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  balanceValue: {
+    color: '#1a1a2e',
+    fontSize: 13,
+    fontWeight: '800',
   },
   formCard: {
     backgroundColor: '#fff',

@@ -178,6 +178,7 @@ async function ensureVisitsSchema(database) {
       weight TEXT NOT NULL DEFAULT '',
       weight_unit TEXT NOT NULL DEFAULT 'kg',
       notes TEXT NOT NULL DEFAULT '',
+      visit_cost REAL NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS visit_medicines (
@@ -190,6 +191,15 @@ async function ensureVisitsSchema(database) {
       duration TEXT NOT NULL DEFAULT '',
       route TEXT NOT NULL DEFAULT '',
       instructions TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER NOT NULL,
+      family_id INTEGER NOT NULL,
+      visit_id INTEGER,
+      amount REAL NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'patient',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 }
@@ -207,6 +217,7 @@ async function ensureVisitColumns(database) {
     { name: 'weight', defaultValue: "''" },
     { name: 'weight_unit', defaultValue: "'kg'" },
     { name: 'notes', defaultValue: "''" },
+    { name: 'visit_cost', defaultValue: '0' },
   ];
   for (const column of requiredColumns) {
     if (!names.has(column.name)) {
@@ -271,6 +282,7 @@ export async function getDb() {
         weight TEXT NOT NULL DEFAULT '',
         weight_unit TEXT NOT NULL DEFAULT 'kg',
         notes TEXT NOT NULL DEFAULT '',
+        visit_cost REAL NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS visit_medicines (
@@ -282,7 +294,15 @@ export async function getDb() {
         frequency TEXT NOT NULL DEFAULT '',
         duration TEXT NOT NULL DEFAULT '',
         route TEXT NOT NULL DEFAULT '',
-        instructions TEXT NOT NULL DEFAULT '',
+        instructions TEXT NOT NULL DEFAULT ''
+      );
+      CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        family_id INTEGER NOT NULL,
+        visit_id INTEGER,
+        amount REAL NOT NULL,
+        scope TEXT NOT NULL DEFAULT 'patient',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS gestures (
@@ -585,11 +605,49 @@ export async function getVisitMedicines(visitId) {
   );
 }
 
+function normalizeAmount(value) {
+  const parsed = Number(value ?? 0);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    throw new Error('Amount must be a non-negative number.');
+  }
+  return parsed;
+}
+
+export async function addPayment(patientId, { familyId, visitId = null, amount, scope = 'patient' }) {
+  const database = await getDb();
+  const normalizedAmount = normalizeAmount(amount);
+  if (normalizedAmount <= 0) return null;
+  const normalizedScope = scope === 'family' ? 'family' : 'patient';
+  const result = await database.runAsync(
+    'INSERT INTO payments (patient_id, family_id, visit_id, amount, scope) VALUES (?, ?, ?, ?, ?)',
+    [patientId, familyId, visitId, normalizedAmount, normalizedScope]
+  );
+  return result.lastInsertRowId;
+}
+
 export async function addVisit(
   patientId,
-  { visitDate, complaints, diagnosis, investigations, procedures, findings, bp, weight, weightUnit, notes, medicines = [] }
+  {
+    familyId,
+    visitDate,
+    complaints,
+    diagnosis,
+    investigations,
+    procedures,
+    findings,
+    bp,
+    weight,
+    weightUnit,
+    notes,
+    visitCost = 0,
+    paymentAmount = 0,
+    paymentScope = 'patient',
+    medicines = [],
+  }
 ) {
   const database = await getDb();
+  const normalizedVisitCost = normalizeAmount(visitCost);
+  const normalizedPaymentAmount = normalizeAmount(paymentAmount);
   const visitInsert = await database.runAsync(
     `
       INSERT INTO visits (
@@ -603,8 +661,9 @@ export async function addVisit(
         bp,
         weight,
         weight_unit,
-        notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        notes,
+        visit_cost
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       patientId,
@@ -618,9 +677,19 @@ export async function addVisit(
       weight ?? '',
       weightUnit ?? 'kg',
       notes ?? '',
+      normalizedVisitCost,
     ]
   );
   const visitId = visitInsert.lastInsertRowId;
+
+  if (normalizedPaymentAmount > 0) {
+    await addPayment(patientId, {
+      familyId,
+      visitId,
+      amount: normalizedPaymentAmount,
+      scope: paymentScope,
+    });
+  }
 
   for (const med of medicines) {
     const normalized = {
@@ -646,6 +715,57 @@ export async function addVisit(
   }
 
   return visitId;
+}
+
+export async function getBalanceSummary(patientId) {
+  const database = await getDb();
+  const patientRow = await database.getFirstAsync('SELECT id, family_id FROM patients WHERE id = ?', [patientId]);
+  if (!patientRow) {
+    return {
+      patientBalance: 0,
+      familyBalance: 0,
+      totalVisitCostPatient: 0,
+      totalPaymentsPatient: 0,
+      totalVisitCostFamily: 0,
+      totalPaymentsFamily: 0,
+    };
+  }
+
+  const patientChargesRow = await database.getFirstAsync(
+    'SELECT coalesce(SUM(visit_cost), 0) AS total FROM visits WHERE patient_id = ?',
+    [patientId]
+  );
+  const patientPaymentsRow = await database.getFirstAsync(
+    "SELECT coalesce(SUM(amount), 0) AS total FROM payments WHERE patient_id = ? AND scope = 'patient'",
+    [patientId]
+  );
+  const familyChargesRow = await database.getFirstAsync(
+    `
+      SELECT coalesce(SUM(v.visit_cost), 0) AS total
+      FROM visits v
+      INNER JOIN patients p ON p.id = v.patient_id
+      WHERE p.family_id = ?
+    `,
+    [patientRow.family_id]
+  );
+  const familyPaymentsRow = await database.getFirstAsync(
+    'SELECT coalesce(SUM(amount), 0) AS total FROM payments WHERE family_id = ?',
+    [patientRow.family_id]
+  );
+
+  const totalVisitCostPatient = Number(patientChargesRow?.total ?? 0);
+  const totalPaymentsPatient = Number(patientPaymentsRow?.total ?? 0);
+  const totalVisitCostFamily = Number(familyChargesRow?.total ?? 0);
+  const totalPaymentsFamily = Number(familyPaymentsRow?.total ?? 0);
+
+  return {
+    patientBalance: totalVisitCostPatient - totalPaymentsPatient,
+    familyBalance: totalVisitCostFamily - totalPaymentsFamily,
+    totalVisitCostPatient,
+    totalPaymentsPatient,
+    totalVisitCostFamily,
+    totalPaymentsFamily,
+  };
 }
 
 export async function getGestures() {

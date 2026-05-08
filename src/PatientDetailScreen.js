@@ -17,8 +17,10 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
+import { useFocusEffect } from '@react-navigation/native';
 import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import { useGestureTextInput } from './GestureInputProvider';
+import { getBalanceSummary } from './database';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
@@ -103,6 +105,7 @@ export default function PatientDetailScreen({ route, navigation }) {
   const { patient } = route.params;
   const [activeTab, setActiveTab] = useState('Personal');
   const [recognizing, setRecognizing] = useState(false);
+  const [balances, setBalances] = useState({ patientBalance: 0, familyBalance: 0 });
 
   // Personal fields
   const [notes, setNotes] = useState('');
@@ -164,6 +167,24 @@ export default function PatientDetailScreen({ route, navigation }) {
       hide.remove();
     };
   }, [fabBottom]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      (async () => {
+        const summary = await getBalanceSummary(patient.id);
+        if (isActive) {
+          setBalances({
+            patientBalance: summary.patientBalance ?? 0,
+            familyBalance: summary.familyBalance ?? 0,
+          });
+        }
+      })().catch(() => {});
+      return () => {
+        isActive = false;
+      };
+    }, [patient.id])
+  );
 
   const personalFields = [
     { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true, input: notesInput },
@@ -271,6 +292,8 @@ export default function PatientDetailScreen({ route, navigation }) {
             {patient.dob ? <Text style={styles.detail}>🎂 {patient.dob}</Text> : null}
             <Text style={styles.detail}>📞 {patient.phone}</Text>
             <Text style={styles.detail}>📍 {patient.address}</Text>
+            <Text style={styles.detail}>Patient Balance: ${Number(balances.patientBalance ?? 0).toFixed(2)}</Text>
+            <Text style={styles.detail}>Family Balance: ${Number(balances.familyBalance ?? 0).toFixed(2)}</Text>
           </View>
 
           <TouchableOpacity style={styles.medCard} onPress={openEditPatient} activeOpacity={0.8}>
