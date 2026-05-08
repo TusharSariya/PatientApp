@@ -232,6 +232,10 @@ export default function PatientDetailScreen({ route, navigation }) {
     navigation.navigate('PatientMedicines', { patient });
   }
 
+  function openVisits() {
+    navigation.navigate('PatientVisits', { patient });
+  }
+
   function openEditPatient() {
     navigation.navigate('EditPatient', { patient });
   }
@@ -273,6 +277,15 @@ export default function PatientDetailScreen({ route, navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.medTitle}>Patient Details</Text>
               <Text style={styles.medSubtitle}>Open editable demographics and contact details.</Text>
+            </View>
+            <View style={styles.medButton}>
+              <Text style={styles.medButtonText}>Open</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.medTitle}>Visits</Text>
+              <Text style={styles.medSubtitle}>View visit history and create a new visit.</Text>
             </View>
             <View style={styles.medButton}>
               <Text style={styles.medButtonText}>Open</Text>

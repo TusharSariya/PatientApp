@@ -163,6 +163,58 @@ async function ensureMedicineHistoryBackfill(database) {
   `);
 }
 
+async function ensureVisitsSchema(database) {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS visits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER NOT NULL,
+      visit_date TEXT NOT NULL,
+      complaints TEXT NOT NULL DEFAULT '',
+      diagnosis TEXT NOT NULL DEFAULT '',
+      investigations TEXT NOT NULL DEFAULT '',
+      procedures TEXT NOT NULL DEFAULT '',
+      findings TEXT NOT NULL DEFAULT '',
+      bp TEXT NOT NULL DEFAULT '',
+      weight TEXT NOT NULL DEFAULT '',
+      weight_unit TEXT NOT NULL DEFAULT 'kg',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS visit_medicines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visit_id INTEGER NOT NULL,
+      patient_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      dosage TEXT NOT NULL DEFAULT '',
+      frequency TEXT NOT NULL DEFAULT '',
+      duration TEXT NOT NULL DEFAULT '',
+      route TEXT NOT NULL DEFAULT '',
+      instructions TEXT NOT NULL DEFAULT ''
+    );
+  `);
+}
+
+async function ensureVisitColumns(database) {
+  const columns = await database.getAllAsync('PRAGMA table_info(visits)');
+  const names = new Set(columns.map(column => column.name));
+  const requiredColumns = [
+    { name: 'complaints', defaultValue: "''" },
+    { name: 'diagnosis', defaultValue: "''" },
+    { name: 'investigations', defaultValue: "''" },
+    { name: 'procedures', defaultValue: "''" },
+    { name: 'findings', defaultValue: "''" },
+    { name: 'bp', defaultValue: "''" },
+    { name: 'weight', defaultValue: "''" },
+    { name: 'weight_unit', defaultValue: "'kg'" },
+    { name: 'notes', defaultValue: "''" },
+  ];
+  for (const column of requiredColumns) {
+    if (!names.has(column.name)) {
+      await database.execAsync(`ALTER TABLE visits ADD COLUMN ${column.name} TEXT NOT NULL DEFAULT ${column.defaultValue};`);
+    }
+  }
+}
+
 export async function getDb() {
   if (!db) {
     console.log('[db] getDb: initializing, __DEV__=', __DEV__);
@@ -206,6 +258,33 @@ export async function getDb() {
         action TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        visit_date TEXT NOT NULL,
+        complaints TEXT NOT NULL DEFAULT '',
+        diagnosis TEXT NOT NULL DEFAULT '',
+        investigations TEXT NOT NULL DEFAULT '',
+        procedures TEXT NOT NULL DEFAULT '',
+        findings TEXT NOT NULL DEFAULT '',
+        bp TEXT NOT NULL DEFAULT '',
+        weight TEXT NOT NULL DEFAULT '',
+        weight_unit TEXT NOT NULL DEFAULT 'kg',
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS visit_medicines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        visit_id INTEGER NOT NULL,
+        patient_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        dosage TEXT NOT NULL DEFAULT '',
+        frequency TEXT NOT NULL DEFAULT '',
+        duration TEXT NOT NULL DEFAULT '',
+        route TEXT NOT NULL DEFAULT '',
+        instructions TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
       CREATE TABLE IF NOT EXISTS gestures (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         word TEXT NOT NULL,
@@ -218,6 +297,8 @@ export async function getDb() {
     await ensureFamiliesSchema(db);
     await ensurePatientsFamilyColumn(db);
     await ensurePatientFamilyAssignments(db);
+    await ensureVisitsSchema(db);
+    await ensureVisitColumns(db);
     await ensureMedicineHistoryBackfill(db);
 
     if (__DEV__) {
@@ -486,6 +567,85 @@ export async function getMedicineHistory(patientId) {
     'SELECT * FROM medicine_history WHERE patient_id = ? ORDER BY id DESC',
     [patientId]
   );
+}
+
+export async function getVisits(patientId) {
+  const database = await getDb();
+  return await database.getAllAsync(
+    'SELECT * FROM visits WHERE patient_id = ? ORDER BY visit_date DESC, id DESC',
+    [patientId]
+  );
+}
+
+export async function getVisitMedicines(visitId) {
+  const database = await getDb();
+  return await database.getAllAsync(
+    'SELECT * FROM visit_medicines WHERE visit_id = ? ORDER BY id ASC',
+    [visitId]
+  );
+}
+
+export async function addVisit(
+  patientId,
+  { visitDate, complaints, diagnosis, investigations, procedures, findings, bp, weight, weightUnit, notes, medicines = [] }
+) {
+  const database = await getDb();
+  const visitInsert = await database.runAsync(
+    `
+      INSERT INTO visits (
+        patient_id,
+        visit_date,
+        complaints,
+        diagnosis,
+        investigations,
+        procedures,
+        findings,
+        bp,
+        weight,
+        weight_unit,
+        notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      patientId,
+      visitDate,
+      complaints ?? '',
+      diagnosis ?? '',
+      investigations ?? '',
+      procedures ?? '',
+      findings ?? '',
+      bp ?? '',
+      weight ?? '',
+      weightUnit ?? 'kg',
+      notes ?? '',
+    ]
+  );
+  const visitId = visitInsert.lastInsertRowId;
+
+  for (const med of medicines) {
+    const normalized = {
+      name: med.name,
+      dosage: med.dosage ?? '',
+      frequency: med.frequency ?? '',
+      duration: med.duration ?? '',
+      route: med.route ?? '',
+      instructions: med.instructions ?? '',
+    };
+    await database.runAsync(
+      'INSERT INTO visit_medicines (visit_id, patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [visitId, patientId, normalized.name, normalized.dosage, normalized.frequency, normalized.duration, normalized.route, normalized.instructions]
+    );
+    const medInsert = await database.runAsync(
+      'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [patientId, normalized.name, normalized.dosage, normalized.frequency, normalized.duration, normalized.route, normalized.instructions]
+    );
+    await database.runAsync(
+      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [patientId, medInsert.lastInsertRowId, normalized.name, normalized.dosage, normalized.frequency, normalized.duration, normalized.route, normalized.instructions, 'added']
+    );
+  }
+
+  return visitId;
 }
 
 export async function getGestures() {
