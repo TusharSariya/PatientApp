@@ -9,10 +9,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { addVisit, getBalanceSummary, getVisitMedicines, getVisits } from './database';
+import { addVisit, getBalanceSummary, getClinicProfile, getVisitMedicines, getVisits } from './database';
+import { buildPrescriptionHtml } from './prescriptionHtml';
+import { sharePrescriptionPdf } from './prescriptionPdf';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-const EMPTY_MED = { name: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' };
+const FREQUENCIES_PER_DAY = [1, 2, 3, 4, 5, 6, 7, 8];
+const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
+const EMPTY_MED = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
 
 function formatDateLabel(value) {
   if (!value) return '';
@@ -39,6 +43,7 @@ export default function PatientVisitsScreen({ route }) {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sharingVisitId, setSharingVisitId] = useState(null);
   const [visitDate, setVisitDate] = useState(todayIsoDate());
   const [complaints, setComplaints] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
@@ -119,6 +124,29 @@ export default function PatientVisitsScreen({ route }) {
     }
   }
 
+  async function handlePrescriptionPdf(visit) {
+    setSharingVisitId(visit.id);
+    try {
+      let meds = visitMedicines[visit.id];
+      if (meds == null) {
+        meds = await getVisitMedicines(visit.id);
+      }
+      const clinic = await getClinicProfile();
+      const html = buildPrescriptionHtml({
+        patient,
+        visit,
+        medicines: meds,
+        clinic,
+        patientBalance: balances.patientBalance,
+      });
+      await sharePrescriptionPdf(html);
+    } catch {
+      Alert.alert('Prescription', 'Could not create or share the PDF.');
+    } finally {
+      setSharingVisitId(null);
+    }
+  }
+
   function addDraftMedicine() {
     if (!draftMed.name.trim()) {
       Alert.alert('Required', 'Medicine name is required.');
@@ -130,6 +158,7 @@ export default function PatientVisitsScreen({ route }) {
         name: draftMed.name.trim(),
         dosage: draftMed.dosage.trim(),
         frequency: draftMed.frequency.trim(),
+        intervalDays: draftMed.intervalDays,
         duration: draftMed.duration.trim(),
         route: draftMed.route,
         instructions: draftMed.instructions.trim(),
@@ -283,6 +312,20 @@ export default function PatientVisitsScreen({ route }) {
               </TouchableOpacity>
             ))}
           </View>
+          <Text style={styles.label}>Interval Between Days</Text>
+          <View style={styles.routeRow}>
+            {INTERVAL_DAYS.map((days) => (
+              <TouchableOpacity
+                key={days}
+                style={[styles.routeChip, draftMed.intervalDays === days && styles.routeChipActive]}
+                onPress={() => setDraftMed((m) => ({ ...m, intervalDays: days }))}
+              >
+                <Text style={[styles.routeChipText, draftMed.intervalDays === days && styles.routeChipTextActive]}>
+                  {days}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text style={styles.sectionTitleInline}>Prescribe Medicines</Text>
           <TextInput
@@ -299,13 +342,23 @@ export default function PatientVisitsScreen({ route }) {
             placeholder="Dosage"
             placeholderTextColor="#bbb"
           />
-          <TextInput
-            style={styles.input}
-            value={draftMed.frequency}
-            onChangeText={(value) => setDraftMed((m) => ({ ...m, frequency: value }))}
-            placeholder="Frequency"
-            placeholderTextColor="#bbb"
-          />
+          <Text style={styles.label}>Frequency (times per day)</Text>
+          <View style={styles.routeRow}>
+            {FREQUENCIES_PER_DAY.map((times) => {
+              const value = `${times}x/day`;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.routeChip, draftMed.frequency === value && styles.routeChipActive]}
+                  onPress={() => setDraftMed((m) => ({ ...m, frequency: value }))}
+                >
+                  <Text style={[styles.routeChipText, draftMed.frequency === value && styles.routeChipTextActive]}>
+                    {times}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
           <TextInput
             style={styles.input}
             value={draftMed.duration}
@@ -339,6 +392,7 @@ export default function PatientVisitsScreen({ route }) {
             <View key={`${med.name}-${index}`} style={styles.prescribedRow}>
               <Text style={styles.prescribedText}>
                 {med.name} {med.dosage ? `· ${med.dosage}` : ''} {med.frequency ? `· ${med.frequency}` : ''}
+                {med.intervalDays ? ` · q${med.intervalDays}d` : ''}
               </Text>
             </View>
           ))}
@@ -372,8 +426,21 @@ export default function PatientVisitsScreen({ route }) {
               <Text style={styles.visitNotes}>Visit Cost: {formatCurrency(visit.visit_cost)}</Text>
               {visit.notes ? <Text style={styles.visitNotes}>{visit.notes}</Text> : null}
               {(visitMedicines[visit.id] ?? []).length > 0 ? (
-                <Text style={styles.visitNotes}>Medicines: {(visitMedicines[visit.id] ?? []).map((med) => med.name).join(', ')}</Text>
+                <Text style={styles.visitNotes}>
+                  Medicines: {(visitMedicines[visit.id] ?? [])
+                    .map((med) => `${med.name}${med.interval_days ? ` (q${med.interval_days}d)` : ''}`)
+                    .join(', ')}
+                </Text>
               ) : null}
+              <TouchableOpacity
+                style={[styles.prescriptionBtn, sharingVisitId === visit.id && styles.prescriptionBtnDisabled]}
+                onPress={() => handlePrescriptionPdf(visit)}
+                disabled={sharingVisitId != null}
+              >
+                <Text style={styles.prescriptionBtnText}>
+                  {sharingVisitId === visit.id ? 'Preparing PDF…' : 'Prescription (PDF)'}
+                </Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -589,5 +656,21 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
     color: '#596580',
+  },
+  prescriptionBtn: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: '#e9eeff',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  prescriptionBtnDisabled: {
+    opacity: 0.65,
+  },
+  prescriptionBtnText: {
+    color: '#2f46c7',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

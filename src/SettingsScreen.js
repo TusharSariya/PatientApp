@@ -3,6 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 
 const ROWS = [
   {
+    key: 'clinic',
+    icon: '🏥',
+    title: 'Practice details',
+    sub: 'Header on PDF prescriptions',
+    screen: 'ClinicProfile',
+  },
+  {
     key: 'gestures',
     icon: '👋',
     title: 'Manage Gestures',

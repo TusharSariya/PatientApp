@@ -27,6 +27,15 @@ export default function HomeScreen({ navigation }) {
 
       <TouchableOpacity
         style={styles.card}
+        onPress={() => navigation.navigate('ClinicProfile')}
+      >
+        <Text style={styles.cardIcon}>👤</Text>
+        <Text style={styles.cardTitle}>Doctor / practice details</Text>
+        <Text style={styles.cardDesc}>Your name, clinic, and hours—shown on prescription PDFs</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.card}
         onPress={() => navigation.navigate('Settings')}
       >
         <Text style={styles.cardIcon}>⚙️</Text>

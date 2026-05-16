@@ -22,7 +22,9 @@ import {
 import { useGestureTextInput } from './GestureInputProvider';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-const EMPTY_FORM = { name: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' };
+const FREQUENCIES_PER_DAY = [1, 2, 3, 4, 5, 6, 7, 8];
+const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
+const EMPTY_FORM = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
 
 function BottomSheet({ visible, onClose, title, children }) {
   return (
@@ -71,7 +73,11 @@ const sheet = StyleSheet.create({
 });
 
 function MedicineCard({ medicine, onPress }) {
-  const sub = [medicine.dosage, medicine.frequency].filter(Boolean).join(' · ');
+  const sub = [
+    medicine.dosage,
+    medicine.frequency,
+    medicine.interval_days ? `q${medicine.interval_days}d` : '',
+  ].filter(Boolean).join(' · ');
   return (
     <TouchableOpacity style={styles.medCard} onPress={onPress} activeOpacity={0.75}>
       <View style={{ flex: 1 }}>
@@ -92,7 +98,8 @@ function formatHistoryTimestamp(value) {
 
 function buildHistoryLine(item) {
   const action = item.action === 'removed' ? 'Removed' : 'Added';
-  const parts = [item.name, item.dosage, item.frequency].filter(Boolean);
+  const interval = item.interval_days ? `q${item.interval_days}d` : '';
+  const parts = [item.name, item.dosage, item.frequency, interval].filter(Boolean);
   return `${action}: ${parts.join(' · ') || item.name}`;
 }
 
@@ -109,13 +116,11 @@ export default function PatientMedicinesScreen({ route }) {
 
   const medNameRef = useRef(null);
   const medDosageRef = useRef(null);
-  const medFrequencyRef = useRef(null);
   const medDurationRef = useRef(null);
   const medInstructionsRef = useRef(null);
 
   const medNameInput = useGestureTextInput({ label: 'Medicine Name', value: medForm.name, setValue: value => setMedForm(form => ({ ...form, name: value })), inputRef: medNameRef });
   const medDosageInput = useGestureTextInput({ label: 'Medicine Dosage', value: medForm.dosage, setValue: value => setMedForm(form => ({ ...form, dosage: value })), inputRef: medDosageRef });
-  const medFrequencyInput = useGestureTextInput({ label: 'Medicine Frequency', value: medForm.frequency, setValue: value => setMedForm(form => ({ ...form, frequency: value })), inputRef: medFrequencyRef });
   const medDurationInput = useGestureTextInput({ label: 'Medicine Duration', value: medForm.duration, setValue: value => setMedForm(form => ({ ...form, duration: value })), inputRef: medDurationRef });
   const medInstructionsInput = useGestureTextInput({ label: 'Medicine Instructions', value: medForm.instructions, setValue: value => setMedForm(form => ({ ...form, instructions: value })), inputRef: medInstructionsRef });
 
@@ -149,6 +154,7 @@ export default function PatientMedicinesScreen({ route }) {
         name: medForm.name.trim(),
         dosage: medForm.dosage.trim(),
         frequency: medForm.frequency.trim(),
+        intervalDays: medForm.intervalDays,
         duration: medForm.duration.trim(),
         route: medForm.route,
         instructions: medForm.instructions.trim(),
@@ -234,6 +240,7 @@ export default function PatientMedicinesScreen({ route }) {
             {[
               { label: 'Dosage', value: detailSheet.med.dosage },
               { label: 'Frequency', value: detailSheet.med.frequency },
+              { label: 'Interval (days)', value: detailSheet.med.interval_days ? String(detailSheet.med.interval_days) : '' },
               { label: 'Duration', value: detailSheet.med.duration },
               { label: 'Route', value: detailSheet.med.route },
               { label: 'Instructions', value: detailSheet.med.instructions },
@@ -295,20 +302,38 @@ export default function PatientMedicinesScreen({ route }) {
             placeholderTextColor="#bbb"
           />
 
-          <Text style={styles.fieldLabel}>Frequency</Text>
-          <TextInput
-            ref={medFrequencyInput.ref}
-            style={[styles.fieldInput, { marginBottom: 16 }]}
-            value={medForm.frequency}
-            onChangeText={v => setMedForm(f => ({ ...f, frequency: v }))}
-            showSoftInputOnFocus={medFrequencyInput.showSoftInputOnFocus}
-            onFocus={medFrequencyInput.onFocus}
-            onBlur={medFrequencyInput.onBlur}
-            onSelectionChange={medFrequencyInput.onSelectionChange}
-            selection={medFrequencyInput.selection}
-            placeholder="e.g. Twice daily"
-            placeholderTextColor="#bbb"
-          />
+          <Text style={styles.fieldLabel}>Frequency (times per day)</Text>
+          <View style={styles.routeRow}>
+            {FREQUENCIES_PER_DAY.map((times) => {
+              const value = `${times}x/day`;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.routeChip, medForm.frequency === value && styles.routeChipActive]}
+                  onPress={() => setMedForm(f => ({ ...f, frequency: value }))}
+                >
+                  <Text style={[styles.routeChipText, medForm.frequency === value && styles.routeChipTextActive]}>
+                    {times}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.fieldLabel}>Interval Between Days</Text>
+          <View style={styles.routeRow}>
+            {INTERVAL_DAYS.map((days) => (
+              <TouchableOpacity
+                key={days}
+                style={[styles.routeChip, medForm.intervalDays === days && styles.routeChipActive]}
+                onPress={() => setMedForm(f => ({ ...f, intervalDays: days }))}
+              >
+                <Text style={[styles.routeChipText, medForm.intervalDays === days && styles.routeChipTextActive]}>
+                  {days}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text style={styles.fieldLabel}>Duration</Text>
           <TextInput

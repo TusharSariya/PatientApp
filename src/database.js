@@ -10,10 +10,20 @@ const MOCK_PATIENTS = [
 ];
 
 const ALICE_MEDICINES = [
-  { name: 'Amoxicillin',  dosage: '500mg', frequency: 'Three times daily', duration: '7 days',  route: 'Oral', instructions: 'Take after meals'  },
-  { name: 'Ibuprofen',    dosage: '400mg', frequency: 'Twice daily',        duration: '5 days',  route: 'Oral', instructions: 'Take with food'     },
-  { name: 'Loratadine',   dosage: '10mg',  frequency: 'Once daily',         duration: '30 days', route: 'Oral', instructions: ''                   },
+  { name: 'Amoxicillin',  dosage: '500mg', frequency: 'Three times daily', intervalDays: 1, duration: '7 days',  route: 'Oral', instructions: 'Take after meals'  },
+  { name: 'Ibuprofen',    dosage: '400mg', frequency: 'Twice daily',       intervalDays: 1, duration: '5 days',  route: 'Oral', instructions: 'Take with food'     },
+  { name: 'Loratadine',   dosage: '10mg',  frequency: 'Once daily',        intervalDays: 1, duration: '30 days', route: 'Oral', instructions: ''                   },
 ];
+
+/** Fictional demo header; seeded in __DEV__ only when clinic_profile.doctor_name is still empty. Prescriptions use getClinicProfile(). */
+const MOCK_CLINIC_PROFILE = {
+  doctorName: 'Dr. Alex Morgan',
+  qualifications: 'MBBS, MD (Family Medicine)',
+  address: 'Sample Medical Clinic\n100 Health Way\nDemo City, DC 00000',
+  contact: 'Office (555) 010-0199',
+  registration: 'Demo registration no. 100000',
+  hours: 'Mon–Fri 9:00 AM – 5:00 PM',
+};
 
 const PATIENT_NAME_SQL = `
   trim(
@@ -139,6 +149,7 @@ async function ensureMedicineHistoryBackfill(database) {
       name,
       dosage,
       frequency,
+      interval_days,
       duration,
       route,
       instructions,
@@ -150,6 +161,7 @@ async function ensureMedicineHistoryBackfill(database) {
       m.name,
       coalesce(m.dosage, ''),
       coalesce(m.frequency, ''),
+      coalesce(m.interval_days, 1),
       coalesce(m.duration, ''),
       coalesce(m.route, ''),
       coalesce(m.instructions, ''),
@@ -161,6 +173,26 @@ async function ensureMedicineHistoryBackfill(database) {
       WHERE h.medicine_id = m.id AND h.action = 'added'
     );
   `);
+}
+
+async function ensureMedicationIntervalColumns(database) {
+  const medicineColumns = await database.getAllAsync('PRAGMA table_info(medicines)');
+  const medicineNames = new Set(medicineColumns.map(column => column.name));
+  if (!medicineNames.has('interval_days')) {
+    await database.execAsync('ALTER TABLE medicines ADD COLUMN interval_days INTEGER NOT NULL DEFAULT 1;');
+  }
+
+  const historyColumns = await database.getAllAsync('PRAGMA table_info(medicine_history)');
+  const historyNames = new Set(historyColumns.map(column => column.name));
+  if (!historyNames.has('interval_days')) {
+    await database.execAsync('ALTER TABLE medicine_history ADD COLUMN interval_days INTEGER NOT NULL DEFAULT 1;');
+  }
+
+  const visitMedColumns = await database.getAllAsync('PRAGMA table_info(visit_medicines)');
+  const visitMedNames = new Set(visitMedColumns.map(column => column.name));
+  if (!visitMedNames.has('interval_days')) {
+    await database.execAsync('ALTER TABLE visit_medicines ADD COLUMN interval_days INTEGER NOT NULL DEFAULT 1;');
+  }
 }
 
 async function ensureVisitsSchema(database) {
@@ -264,20 +296,44 @@ async function insertSeedVisitWithMedicines(database, {
 
   for (const med of medicines) {
     await database.runAsync(
-      'INSERT INTO visit_medicines (visit_id, patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [visitId, patientId, med.name, med.dosage ?? '', med.frequency ?? '', med.duration ?? '', med.route ?? '', med.instructions ?? '']
+      'INSERT INTO visit_medicines (visit_id, patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [visitId, patientId, med.name, med.dosage ?? '', med.frequency ?? '', med.intervalDays ?? 1, med.duration ?? '', med.route ?? '', med.instructions ?? '']
     );
     const medInsert = await database.runAsync(
-      'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [patientId, med.name, med.dosage ?? '', med.frequency ?? '', med.duration ?? '', med.route ?? '', med.instructions ?? '']
+      'INSERT INTO medicines (patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [patientId, med.name, med.dosage ?? '', med.frequency ?? '', med.intervalDays ?? 1, med.duration ?? '', med.route ?? '', med.instructions ?? '']
     );
     await database.runAsync(
-      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [patientId, medInsert.lastInsertRowId, med.name, med.dosage ?? '', med.frequency ?? '', med.duration ?? '', med.route ?? '', med.instructions ?? '', 'added']
+      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [patientId, medInsert.lastInsertRowId, med.name, med.dosage ?? '', med.frequency ?? '', med.intervalDays ?? 1, med.duration ?? '', med.route ?? '', med.instructions ?? '', 'added']
     );
   }
 
   return visitId;
+}
+
+async function ensureDevClinicProfileMock(database) {
+  if (!__DEV__) return;
+  const row = await database.getFirstAsync('SELECT doctor_name FROM clinic_profile WHERE id = 1');
+  if ((row?.doctor_name ?? '').trim() !== '') return;
+  await database.runAsync(
+    `UPDATE clinic_profile SET
+      doctor_name = ?,
+      qualifications = ?,
+      address = ?,
+      contact = ?,
+      registration = ?,
+      hours = ?
+    WHERE id = 1`,
+    [
+      MOCK_CLINIC_PROFILE.doctorName,
+      MOCK_CLINIC_PROFILE.qualifications,
+      MOCK_CLINIC_PROFILE.address,
+      MOCK_CLINIC_PROFILE.contact,
+      MOCK_CLINIC_PROFILE.registration,
+      MOCK_CLINIC_PROFILE.hours,
+    ]
+  );
 }
 
 async function ensureDevFamilyMockData(database) {
@@ -369,6 +425,7 @@ export async function getDb() {
         name TEXT NOT NULL,
         dosage TEXT,
         frequency TEXT,
+        interval_days INTEGER NOT NULL DEFAULT 1,
         duration TEXT,
         route TEXT,
         instructions TEXT
@@ -380,6 +437,7 @@ export async function getDb() {
         name TEXT NOT NULL,
         dosage TEXT,
         frequency TEXT,
+        interval_days INTEGER NOT NULL DEFAULT 1,
         duration TEXT,
         route TEXT,
         instructions TEXT,
@@ -409,6 +467,7 @@ export async function getDb() {
         name TEXT NOT NULL,
         dosage TEXT NOT NULL DEFAULT '',
         frequency TEXT NOT NULL DEFAULT '',
+        interval_days INTEGER NOT NULL DEFAULT 1,
         duration TEXT NOT NULL DEFAULT '',
         route TEXT NOT NULL DEFAULT '',
         instructions TEXT NOT NULL DEFAULT ''
@@ -427,6 +486,16 @@ export async function getDb() {
         word TEXT NOT NULL,
         data TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS clinic_profile (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        doctor_name TEXT NOT NULL DEFAULT '',
+        qualifications TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        contact TEXT NOT NULL DEFAULT '',
+        registration TEXT NOT NULL DEFAULT '',
+        hours TEXT NOT NULL DEFAULT ''
+      );
+      INSERT OR IGNORE INTO clinic_profile (id) VALUES (1);
     `);
 
     await ensurePatientsSchema(db);
@@ -436,8 +505,10 @@ export async function getDb() {
     await ensurePatientFamilyAssignments(db);
     await ensureVisitsSchema(db);
     await ensureVisitColumns(db);
+    await ensureMedicationIntervalColumns(db);
     await ensureMedicineHistoryBackfill(db);
     if (__DEV__) {
+      await ensureDevClinicProfileMock(db);
       await ensureDevFamilyMockData(db);
     }
 
@@ -457,12 +528,12 @@ export async function getDb() {
         }
         for (const m of ALICE_MEDICINES) {
           const medInsert = await db.runAsync(
-            'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [aliceId, m.name, m.dosage, m.frequency, m.duration, m.route, m.instructions]
+            'INSERT INTO medicines (patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [aliceId, m.name, m.dosage, m.frequency, m.intervalDays ?? 1, m.duration, m.route, m.instructions]
           );
           await db.runAsync(
-            'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [aliceId, medInsert.lastInsertRowId, m.name, m.dosage, m.frequency, m.duration, m.route, m.instructions, 'added']
+            'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [aliceId, medInsert.lastInsertRowId, m.name, m.dosage, m.frequency, m.intervalDays ?? 1, m.duration, m.route, m.instructions, 'added']
           );
         }
       }
@@ -641,36 +712,39 @@ export async function getMedicines(patientId) {
   );
 }
 
-export async function addMedicine(patientId, { name, dosage, frequency, duration, route, instructions }) {
+export async function addMedicine(patientId, { name, dosage, frequency, intervalDays, duration, route, instructions }) {
   const database = await getDb();
   const normalized = {
     name,
     dosage: dosage ?? '',
     frequency: frequency ?? '',
+    intervalDays: normalizeIntervalDays(intervalDays),
     duration: duration ?? '',
     route: route ?? '',
     instructions: instructions ?? '',
   };
   const result = await database.runAsync(
-    'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO medicines (patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [
       patientId,
       normalized.name,
       normalized.dosage,
       normalized.frequency,
+      normalized.intervalDays,
       normalized.duration,
       normalized.route,
       normalized.instructions,
     ]
   );
   await database.runAsync(
-    'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       patientId,
       result.lastInsertRowId,
       normalized.name,
       normalized.dosage,
       normalized.frequency,
+      normalized.intervalDays,
       normalized.duration,
       normalized.route,
       normalized.instructions,
@@ -687,13 +761,14 @@ export async function deleteMedicine(id) {
 
   await database.runAsync('DELETE FROM medicines WHERE id = ?', [id]);
   await database.runAsync(
-    'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       current.patient_id,
       current.id,
       current.name,
       current.dosage ?? '',
       current.frequency ?? '',
+      current.interval_days ?? 1,
       current.duration ?? '',
       current.route ?? '',
       current.instructions ?? '',
@@ -730,6 +805,14 @@ function normalizeAmount(value) {
   const parsed = Number(value ?? 0);
   if (Number.isNaN(parsed) || parsed < 0) {
     throw new Error('Amount must be a non-negative number.');
+  }
+  return parsed;
+}
+
+function normalizeIntervalDays(value) {
+  const parsed = Number(value ?? 1);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 30) {
+    throw new Error('Medication interval must be an integer from 1 to 30 days.');
   }
   return parsed;
 }
@@ -817,21 +900,22 @@ export async function addVisit(
       name: med.name,
       dosage: med.dosage ?? '',
       frequency: med.frequency ?? '',
+      intervalDays: normalizeIntervalDays(med.intervalDays),
       duration: med.duration ?? '',
       route: med.route ?? '',
       instructions: med.instructions ?? '',
     };
     await database.runAsync(
-      'INSERT INTO visit_medicines (visit_id, patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [visitId, patientId, normalized.name, normalized.dosage, normalized.frequency, normalized.duration, normalized.route, normalized.instructions]
+      'INSERT INTO visit_medicines (visit_id, patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [visitId, patientId, normalized.name, normalized.dosage, normalized.frequency, normalized.intervalDays, normalized.duration, normalized.route, normalized.instructions]
     );
     const medInsert = await database.runAsync(
-      'INSERT INTO medicines (patient_id, name, dosage, frequency, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [patientId, normalized.name, normalized.dosage, normalized.frequency, normalized.duration, normalized.route, normalized.instructions]
+      'INSERT INTO medicines (patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [patientId, normalized.name, normalized.dosage, normalized.frequency, normalized.intervalDays, normalized.duration, normalized.route, normalized.instructions]
     );
     await database.runAsync(
-      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [patientId, medInsert.lastInsertRowId, normalized.name, normalized.dosage, normalized.frequency, normalized.duration, normalized.route, normalized.instructions, 'added']
+      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [patientId, medInsert.lastInsertRowId, normalized.name, normalized.dosage, normalized.frequency, normalized.intervalDays, normalized.duration, normalized.route, normalized.instructions, 'added']
     );
   }
 
@@ -887,6 +971,55 @@ export async function getBalanceSummary(patientId) {
     totalVisitCostFamily,
     totalPaymentsFamily,
   };
+}
+
+export function mapClinicProfileRow(row) {
+  if (!row) {
+    return {
+      doctorName: '',
+      qualifications: '',
+      address: '',
+      contact: '',
+      registration: '',
+      hours: '',
+    };
+  }
+  return {
+    doctorName: row.doctor_name ?? '',
+    qualifications: row.qualifications ?? '',
+    address: row.address ?? '',
+    contact: row.contact ?? '',
+    registration: row.registration ?? '',
+    hours: row.hours ?? '',
+  };
+}
+
+export async function getClinicProfile() {
+  const database = await getDb();
+  const row = await database.getFirstAsync('SELECT * FROM clinic_profile WHERE id = 1');
+  return mapClinicProfileRow(row);
+}
+
+export async function saveClinicProfile({
+  doctorName = '',
+  qualifications = '',
+  address = '',
+  contact = '',
+  registration = '',
+  hours = '',
+}) {
+  const database = await getDb();
+  await database.runAsync(
+    `UPDATE clinic_profile SET
+      doctor_name = ?,
+      qualifications = ?,
+      address = ?,
+      contact = ?,
+      registration = ?,
+      hours = ?
+    WHERE id = 1`,
+    [doctorName, qualifications, address, contact, registration, hours]
+  );
 }
 
 export async function getGestures() {

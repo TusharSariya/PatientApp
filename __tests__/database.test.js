@@ -50,6 +50,7 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS patients'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS medicine_history'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS gestures'));
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS clinic_profile'));
   });
 
   test('addPatient inserts patient and uses existing family id when provided', async () => {
@@ -175,12 +176,12 @@ describe('database', () => {
     expect(db.runAsync).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining('INSERT INTO medicines'),
-      [99, 'Ibuprofen', '', '', '', '', '']
+      [99, 'Ibuprofen', '', '', 1, '', '', '']
     );
     expect(db.runAsync).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('INSERT INTO medicine_history'),
-      [99, 42, 'Ibuprofen', '', '', '', '', '', 'added']
+      [99, 42, 'Ibuprofen', '', '', 1, '', '', '', 'added']
     );
     expect(db.runAsync).toHaveBeenNthCalledWith(
       3,
@@ -190,9 +191,52 @@ describe('database', () => {
     expect(db.runAsync).toHaveBeenNthCalledWith(
       4,
       expect.stringContaining('INSERT INTO medicine_history'),
-      [99, 42, 'Ibuprofen', '', '', '', '', '', 'removed']
+      [99, 42, 'Ibuprofen', '', '', 1, '', '', '', 'removed']
     );
     expect(db.getFirstAsync).toHaveBeenCalledWith('SELECT * FROM medicines WHERE id = ?', [42]);
+  });
+
+  test('getClinicProfile and saveClinicProfile read and update singleton row', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM clinic_profile')) {
+        return {
+          id: 1,
+          doctor_name: 'Dr A',
+          qualifications: 'MBBS',
+          address: '1 Main St',
+          contact: '555',
+          registration: 'Reg 1',
+          hours: '9–5',
+        };
+      }
+      return { count: 0 };
+    });
+    db.runAsync.mockResolvedValue({ changes: 1 });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const profile = await database.getClinicProfile();
+    expect(profile).toEqual({
+      doctorName: 'Dr A',
+      qualifications: 'MBBS',
+      address: '1 Main St',
+      contact: '555',
+      registration: 'Reg 1',
+      hours: '9–5',
+    });
+
+    await database.saveClinicProfile({
+      doctorName: 'Dr B',
+      qualifications: 'MD',
+      address: '2 Oak',
+      contact: 'x',
+      registration: 'r',
+      hours: 'h',
+    });
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE clinic_profile'),
+      ['Dr B', 'MD', '2 Oak', 'x', 'r', 'h']
+    );
   });
 
   test('gesture helpers list, insert, and delete gestures', async () => {

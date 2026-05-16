@@ -11,10 +11,12 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Patient Manager')).toBeTruthy();
     fireEvent.press(screen.getByText('New Patient'));
     fireEvent.press(screen.getByText('Search Patients'));
+    fireEvent.press(screen.getByText('Doctor / practice details'));
     fireEvent.press(screen.getByText('Settings'));
 
     expect(navigation.navigate).toHaveBeenNthCalledWith(1, 'AddPatient');
     expect(navigation.navigate).toHaveBeenNthCalledWith(2, 'Search');
-    expect(navigation.navigate).toHaveBeenNthCalledWith(3, 'Settings');
+    expect(navigation.navigate).toHaveBeenNthCalledWith(3, 'ClinicProfile');
+    expect(navigation.navigate).toHaveBeenNthCalledWith(4, 'Settings');
   });
 });

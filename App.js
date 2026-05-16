@@ -11,6 +11,7 @@ import EditPatientScreen from './src/EditPatientScreen';
 import PatientMedicinesScreen from './src/PatientMedicinesScreen';
 import PatientVisitsScreen from './src/PatientVisitsScreen';
 import SettingsScreen from './src/SettingsScreen';
+import ClinicProfileScreen from './src/ClinicProfileScreen';
 import ManageGesturesScreen from './src/ManageGesturesScreen';
 import TestGestureScreen from './src/TestGestureScreen';
 import { GestureInputProvider } from './src/GestureInputProvider';
@@ -68,6 +69,11 @@ export default function App() {
             name="Settings"
             component={SettingsScreen}
             options={{ title: 'Settings' }}
+          />
+          <Stack.Screen
+            name="ClinicProfile"
+            component={ClinicProfileScreen}
+            options={{ title: 'Doctor details' }}
           />
           <Stack.Screen
             name="ManageGestures"
