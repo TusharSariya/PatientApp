@@ -9,17 +9,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getVisitsInDateRange } from './database';
+import { formatMoney } from './currency';
+import { getAppSettings, getVisitsInDateRange } from './database';
 import {
   groupVisitsByDate,
   isValidIsoDate,
   startOfMonthIsoDate,
   todayIsoDate,
 } from './visitDates';
-
-function formatCurrency(value) {
-  return `$${Number(value ?? 0).toFixed(2)}`;
-}
 
 function visitToPatient(row) {
   return {
@@ -35,13 +32,13 @@ function visitToPatient(row) {
   };
 }
 
-function VisitCard({ visit, onPress }) {
+function VisitCard({ visit, currencyCode, onPress }) {
   return (
     <TouchableOpacity style={styles.visitRow} onPress={onPress} activeOpacity={0.75}>
       <Text style={styles.patientName} numberOfLines={1}>
         {visit.patient_name}
       </Text>
-      <Text style={styles.visitCost}>{formatCurrency(visit.visit_cost)}</Text>
+      <Text style={styles.visitCost}>{formatMoney(visit.visit_cost, currencyCode)}</Text>
     </TouchableOpacity>
   );
 }
@@ -52,6 +49,7 @@ export default function AllVisitsScreen({ navigation }) {
   const [visits, setVisits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [currencyCode, setCurrencyCode] = useState('INR');
 
   const loadVisits = useCallback(async () => {
     const start = startDate.trim();
@@ -73,8 +71,12 @@ export default function AllVisitsScreen({ navigation }) {
     setLoading(true);
     setHasSearched(true);
     try {
-      const rows = await getVisitsInDateRange({ startDate: start, endDate: end });
+      const [rows, settings] = await Promise.all([
+        getVisitsInDateRange({ startDate: start, endDate: end }),
+        getAppSettings(),
+      ]);
       setVisits(rows);
+      setCurrencyCode(settings.currencyCode);
     } catch {
       Alert.alert('Error', 'Could not load visits.');
       setVisits([]);
@@ -149,6 +151,7 @@ export default function AllVisitsScreen({ navigation }) {
           renderItem={({ item }) => (
             <VisitCard
               visit={item}
+              currencyCode={currencyCode}
               onPress={() => navigation.navigate('PatientVisits', { patient: visitToPatient(item) })}
             />
           )}

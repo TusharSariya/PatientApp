@@ -1,7 +1,7 @@
+const { formatMoney } = require('../src/currency');
 const {
   escapeHtml,
   formatVisitDateDisplay,
-  formatCurrency,
   formatMedicineLine,
   buildPrescriptionHtml,
 } = require('../src/prescriptionHtml');
@@ -17,11 +17,6 @@ describe('prescriptionHtml', () => {
   test('formatVisitDateDisplay converts ISO date to DD/MM/YYYY', () => {
     expect(formatVisitDateDisplay('2026-04-30')).toBe('30/04/2026');
     expect(formatVisitDateDisplay('')).toBe('—');
-  });
-
-  test('formatCurrency formats amounts to two decimals', () => {
-    expect(formatCurrency(150)).toBe('150.00');
-    expect(formatCurrency(0)).toBe('0.00');
   });
 
   test('formatMedicineLine combines visit_medicine fields', () => {
@@ -47,6 +42,7 @@ describe('prescriptionHtml', () => {
       medicines: [{ name: 'Med A', dosage: '10mg', frequency: '', interval_days: 1, duration: '', route: 'Oral', instructions: '' }],
       clinic: { doctorName: 'Dr Good', qualifications: '', address: '', contact: '', registration: '', hours: '' },
       patientBalance: 12.5,
+      currencyCode: 'USD',
     });
     expect(html).toContain('Mr &lt;Evil&gt; Test');
     expect(html).not.toContain('Mr <Evil>');
@@ -55,9 +51,21 @@ describe('prescriptionHtml', () => {
     expect(html).toContain('42');
     expect(html).toContain('15/01/2026');
     expect(html).toContain('Med A');
-    expect(html).toContain('12.50');
     expect(html).toContain('Visit Cost :-');
-    expect(html).toContain('180.00');
+    expect(html).toContain(escapeHtml(formatMoney(180, 'USD')));
+    expect(html).toContain(escapeHtml(formatMoney(12.5, 'USD')));
+  });
+
+  test('buildPrescriptionHtml uses INR by default', () => {
+    const html = buildPrescriptionHtml({
+      patient: { id: 1, name: 'A' },
+      visit: { visit_date: '2026-05-01', diagnosis: '', visit_cost: 200 },
+      medicines: [],
+      clinic: {},
+      patientBalance: 50,
+    });
+    expect(html).toContain(escapeHtml(formatMoney(200, 'INR')));
+    expect(html).toContain(escapeHtml(formatMoney(50, 'INR')));
   });
 
   test('buildPrescriptionHtml shows empty treatment message when no medicines', () => {

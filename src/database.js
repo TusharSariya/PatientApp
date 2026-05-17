@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { DEFAULT_CURRENCY_CODE, isValidCurrencyCode } from './currency';
 import { splitPatientName } from './patientName';
 
 let db;
@@ -233,6 +234,16 @@ async function ensureVisitsSchema(database) {
       scope TEXT NOT NULL DEFAULT 'patient',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+}
+
+async function ensureAppSettingsSchema(database) {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      currency_code TEXT NOT NULL DEFAULT 'INR'
+    );
+    INSERT OR IGNORE INTO app_settings (id, currency_code) VALUES (1, 'INR');
   `);
 }
 
@@ -498,6 +509,7 @@ export async function getDb() {
       INSERT OR IGNORE INTO clinic_profile (id) VALUES (1);
     `);
 
+    await ensureAppSettingsSchema(db);
     await ensurePatientsSchema(db);
     await ensurePatientsDobColumn(db);
     await ensureFamiliesSchema(db);
@@ -1037,6 +1049,26 @@ export async function getClinicProfile() {
   const database = await getDb();
   const row = await database.getFirstAsync('SELECT * FROM clinic_profile WHERE id = 1');
   return mapClinicProfileRow(row);
+}
+
+export function mapAppSettingsRow(row) {
+  const code = row?.currency_code ?? DEFAULT_CURRENCY_CODE;
+  return {
+    currencyCode: isValidCurrencyCode(code) ? code : DEFAULT_CURRENCY_CODE,
+  };
+}
+
+export async function getAppSettings() {
+  const database = await getDb();
+  const row = await database.getFirstAsync('SELECT * FROM app_settings WHERE id = 1');
+  return mapAppSettingsRow(row);
+}
+
+export async function saveAppSettings({ currencyCode }) {
+  const database = await getDb();
+  const normalized = isValidCurrencyCode(currencyCode) ? currencyCode : DEFAULT_CURRENCY_CODE;
+  await database.runAsync('UPDATE app_settings SET currency_code = ? WHERE id = 1', [normalized]);
+  return mapAppSettingsRow({ currency_code: normalized });
 }
 
 export async function saveClinicProfile({

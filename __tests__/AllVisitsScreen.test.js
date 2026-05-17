@@ -2,10 +2,11 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import AllVisitsScreen from '../src/AllVisitsScreen';
-import { getVisitsInDateRange } from '../src/database';
+import { getAppSettings, getVisitsInDateRange } from '../src/database';
 
 jest.mock('../src/database', () => ({
   getVisitsInDateRange: jest.fn(),
+  getAppSettings: jest.fn(),
 }));
 
 describe('AllVisitsScreen', () => {
@@ -14,6 +15,7 @@ describe('AllVisitsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getVisitsInDateRange.mockResolvedValue([]);
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR' });
   });
 
   test('loads visits when View visits is pressed', async () => {
@@ -68,8 +70,8 @@ describe('AllVisitsScreen', () => {
 
     expect(screen.getByText('Bob Smith')).toBeTruthy();
     expect(screen.getByText('Alice Jones')).toBeTruthy();
-    expect(screen.getByText('$150.00')).toBeTruthy();
-    expect(screen.getByText('$80.00')).toBeTruthy();
+    expect(screen.getByText(/150/)).toBeTruthy();
+    expect(screen.getByText(/80/)).toBeTruthy();
     expect(screen.getByText('2 visits')).toBeTruthy();
   });
 

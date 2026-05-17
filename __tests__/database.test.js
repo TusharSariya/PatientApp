@@ -51,6 +51,39 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS medicine_history'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS gestures'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS clinic_profile'));
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS app_settings'));
+  });
+
+  test('getAppSettings returns INR by default', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM app_settings')) {
+        return { id: 1, currency_code: 'INR' };
+      }
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const settings = await database.getAppSettings();
+    expect(settings).toEqual({ currencyCode: 'INR' });
+  });
+
+  test('saveAppSettings updates currency_code', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      return { count: 0 };
+    });
+    db.runAsync.mockResolvedValue({ changes: 1 });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const settings = await database.saveAppSettings({ currencyCode: 'USD' });
+    expect(settings).toEqual({ currencyCode: 'USD' });
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE app_settings'),
+      ['USD']
+    );
   });
 
   test('addPatient inserts patient and uses existing family id when provided', async () => {

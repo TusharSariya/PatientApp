@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import PatientVisitsScreen from '../src/PatientVisitsScreen';
 import {
   getBalanceSummary,
+  getAppSettings,
   getMedicines,
   getVisitMedicines,
   getVisits,
@@ -16,6 +17,7 @@ jest.mock('../src/database', () => ({
   getBalanceSummary: jest.fn(),
   getMedicines: jest.fn(),
   getClinicProfile: jest.fn(),
+  getAppSettings: jest.fn(),
   addVisit: jest.fn(),
 }));
 
@@ -40,6 +42,7 @@ describe('PatientVisitsScreen', () => {
       patientBalance: 0,
       familyBalance: 0,
     });
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR' });
     getMedicines.mockResolvedValue([
       {
         id: 1,

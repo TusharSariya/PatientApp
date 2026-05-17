@@ -12,6 +12,7 @@ import PatientMedicinesScreen from './src/PatientMedicinesScreen';
 import PatientVisitsScreen from './src/PatientVisitsScreen';
 import SettingsScreen from './src/SettingsScreen';
 import ClinicProfileScreen from './src/ClinicProfileScreen';
+import CurrencySettingsScreen from './src/CurrencySettingsScreen';
 import ManageGesturesScreen from './src/ManageGesturesScreen';
 import TestGestureScreen from './src/TestGestureScreen';
 import AllVisitsScreen from './src/AllVisitsScreen';
@@ -80,6 +81,11 @@ export default function App() {
             name="ClinicProfile"
             component={ClinicProfileScreen}
             options={{ title: 'Doctor details' }}
+          />
+          <Stack.Screen
+            name="CurrencySettings"
+            component={CurrencySettingsScreen}
+            options={{ title: 'Currency' }}
           />
           <Stack.Screen
             name="ManageGestures"

@@ -2,6 +2,8 @@
  * Builds a print-friendly HTML prescription (replaces legacy .frx layout for mobile).
  */
 
+import { DEFAULT_CURRENCY_CODE, formatMoney } from './currency';
+
 export function escapeHtml(value) {
   if (value == null) return '';
   return String(value)
@@ -18,12 +20,6 @@ export function formatVisitDateDisplay(isoDate) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
   if (m) return `${m[3]}/${m[2]}/${m[1]}`;
   return trimmed;
-}
-
-export function formatCurrency(value) {
-  const amount = Number(value ?? 0);
-  if (!Number.isFinite(amount)) return '0.00';
-  return amount.toFixed(2);
 }
 
 export function formatMedicineLine(med) {
@@ -57,8 +53,16 @@ export function formatMedicineLine(med) {
  * @param {object[]} params.medicines — visit_medicines rows
  * @param {{ doctorName: string, qualifications: string, address: string, contact: string, registration: string, hours: string }} params.clinic
  * @param {number} [params.patientBalance]
+ * @param {string} [params.currencyCode]
  */
-export function buildPrescriptionHtml({ patient, visit, medicines = [], clinic = {}, patientBalance = 0 }) {
+export function buildPrescriptionHtml({
+  patient,
+  visit,
+  medicines = [],
+  clinic = {},
+  patientBalance = 0,
+  currencyCode = DEFAULT_CURRENCY_CODE,
+}) {
   const c = clinic || {};
   const doctor = escapeHtml(c.doctorName || 'Practice');
   const qual = escapeHtml(c.qualifications || '');
@@ -71,7 +75,7 @@ export function buildPrescriptionHtml({ patient, visit, medicines = [], clinic =
   const dt = escapeHtml(formatVisitDateDisplay(visit?.visit_date));
   const ptName = escapeHtml(patient?.name ?? '');
   const diagnosisHtml = escapeHtml((visit?.diagnosis ?? '').trim() || '—').replace(/\n/g, '<br/>');
-  const visitCostStr = escapeHtml(formatCurrency(visit?.visit_cost));
+  const visitCostStr = escapeHtml(formatMoney(visit?.visit_cost, currencyCode));
 
   const medBlocks = (medicines || []).length
     ? (medicines || [])
@@ -82,8 +86,7 @@ export function buildPrescriptionHtml({ patient, visit, medicines = [], clinic =
         .join('')
     : `<div class="med muted">No medicines recorded for this visit.</div>`;
 
-  const bal = Number(patientBalance ?? 0);
-  const balStr = escapeHtml(Number.isFinite(bal) ? bal.toFixed(2) : '0.00');
+  const balStr = escapeHtml(formatMoney(patientBalance, currencyCode));
   const footerDate = dt;
 
   return `<!DOCTYPE html>

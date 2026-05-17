@@ -19,7 +19,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import { useGestureTextInput } from './GestureInputProvider';
-import { getBalanceSummary } from './database';
+import { formatMoney } from './currency';
+import { getAppSettings, getBalanceSummary } from './database';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
@@ -84,6 +85,7 @@ export default function PatientDetailScreen({ route, navigation }) {
   const { patient } = route.params;
   const [recognizing, setRecognizing] = useState(false);
   const [balances, setBalances] = useState({ patientBalance: 0, familyBalance: 0 });
+  const [currencyCode, setCurrencyCode] = useState('INR');
   const [notes, setNotes] = useState('');
 
   const notesRef = useRef(null);
@@ -126,12 +128,16 @@ export default function PatientDetailScreen({ route, navigation }) {
     React.useCallback(() => {
       let isActive = true;
       (async () => {
-        const summary = await getBalanceSummary(patient.id);
+        const [summary, settings] = await Promise.all([
+          getBalanceSummary(patient.id),
+          getAppSettings(),
+        ]);
         if (isActive) {
           setBalances({
             patientBalance: summary.patientBalance ?? 0,
             familyBalance: summary.familyBalance ?? 0,
           });
+          setCurrencyCode(settings.currencyCode);
         }
       })().catch(() => {});
       return () => {
@@ -222,8 +228,8 @@ export default function PatientDetailScreen({ route, navigation }) {
           {patient.dob ? <Text style={styles.detail}>🎂 {patient.dob}</Text> : null}
           <Text style={styles.detail}>📞 {patient.phone}</Text>
           <Text style={styles.detail}>📍 {patient.address}</Text>
-          <Text style={styles.detail}>Patient Balance: ${Number(balances.patientBalance ?? 0).toFixed(2)}</Text>
-          <Text style={styles.detail}>Family Balance: ${Number(balances.familyBalance ?? 0).toFixed(2)}</Text>
+          <Text style={styles.detail}>Patient Balance: {formatMoney(balances.patientBalance, currencyCode)}</Text>
+          <Text style={styles.detail}>Family Balance: {formatMoney(balances.familyBalance, currencyCode)}</Text>
         </View>
 
         <TouchableOpacity style={styles.medCard} onPress={openEditPatient} activeOpacity={0.8}>

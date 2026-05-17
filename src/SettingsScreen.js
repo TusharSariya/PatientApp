@@ -10,6 +10,13 @@ const ROWS = [
     screen: 'ClinicProfile',
   },
   {
+    key: 'currency',
+    icon: '₹',
+    title: 'Currency',
+    sub: 'Amounts on prescriptions and visits',
+    screen: 'CurrencySettings',
+  },
+  {
     key: 'gestures',
     icon: '👋',
     title: 'Manage Gestures',

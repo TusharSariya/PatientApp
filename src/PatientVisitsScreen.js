@@ -9,7 +9,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { addVisit, getBalanceSummary, getClinicProfile, getMedicines, getVisitMedicines, getVisits } from './database';
+import { formatMoney } from './currency';
+import {
+  addVisit,
+  getAppSettings,
+  getBalanceSummary,
+  getClinicProfile,
+  getMedicines,
+  getVisitMedicines,
+  getVisits,
+} from './database';
 import { buildPrescriptionHtml } from './prescriptionHtml';
 import { sharePrescriptionPdf } from './prescriptionPdf';
 import MedicationFrequencyField from './MedicationFrequencyField';
@@ -28,10 +37,6 @@ function formatDateLabel(value) {
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function formatCurrency(value) {
-  return `$${Number(value ?? 0).toFixed(2)}`;
 }
 
 export default function PatientVisitsScreen({ route }) {
@@ -64,6 +69,7 @@ export default function PatientVisitsScreen({ route }) {
   const [visitCost, setVisitCost] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentScope, setPaymentScope] = useState('patient');
+  const [currencyCode, setCurrencyCode] = useState('INR');
 
   const loadVisits = useCallback(async () => {
     setLoading(true);
@@ -76,6 +82,8 @@ export default function PatientVisitsScreen({ route }) {
       setBalances(balanceSummary);
       const activeMeds = await getMedicines(patient.id);
       setCurrentMedicines(activeMeds);
+      const settings = await getAppSettings();
+      setCurrencyCode(settings.currencyCode);
     } finally {
       setLoading(false);
     }
@@ -139,13 +147,14 @@ export default function PatientVisitsScreen({ route }) {
       if (meds == null) {
         meds = await getVisitMedicines(visit.id);
       }
-      const clinic = await getClinicProfile();
+      const [clinic, settings] = await Promise.all([getClinicProfile(), getAppSettings()]);
       const html = buildPrescriptionHtml({
         patient,
         visit,
         medicines: meds,
         clinic,
         patientBalance: balances.patientBalance,
+        currencyCode: settings.currencyCode,
       });
       await sharePrescriptionPdf(html);
     } catch {
@@ -232,11 +241,11 @@ export default function PatientVisitsScreen({ route }) {
           <Text style={styles.patientDetail}>Visits and encounter history</Text>
           <View style={styles.balanceRow}>
             <Text style={styles.balanceLabel}>Patient Balance:</Text>
-            <Text style={styles.balanceValue}>{formatCurrency(balances.patientBalance)}</Text>
+            <Text style={styles.balanceValue}>{formatMoney(balances.patientBalance, currencyCode)}</Text>
           </View>
           <View style={styles.balanceRow}>
             <Text style={styles.balanceLabel}>Family Balance:</Text>
-            <Text style={styles.balanceValue}>{formatCurrency(balances.familyBalance)}</Text>
+            <Text style={styles.balanceValue}>{formatMoney(balances.familyBalance, currencyCode)}</Text>
           </View>
         </View>
 
@@ -537,7 +546,7 @@ export default function PatientVisitsScreen({ route }) {
               {visit.findings ? <Text style={styles.visitNotes}>Findings: {visit.findings}</Text> : null}
               {visit.bp ? <Text style={styles.visitNotes}>BP: {visit.bp}</Text> : null}
               {visit.weight ? <Text style={styles.visitNotes}>Weight: {visit.weight} {visit.weight_unit || 'kg'}</Text> : null}
-              <Text style={styles.visitNotes}>Visit Cost: {formatCurrency(visit.visit_cost)}</Text>
+              <Text style={styles.visitNotes}>Visit Cost: {formatMoney(visit.visit_cost, currencyCode)}</Text>
               {visit.notes ? <Text style={styles.visitNotes}>{visit.notes}</Text> : null}
               {(visitMedicines[visit.id] ?? []).length > 0 ? (
                 <Text style={styles.visitNotes}>
