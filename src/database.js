@@ -793,6 +793,45 @@ export async function getVisits(patientId) {
   );
 }
 
+export async function getVisitsInDateRange({ startDate, endDate }) {
+  const database = await getDb();
+  return await database.getAllAsync(
+    `
+      SELECT
+        v.*,
+        p.id AS patient_id,
+        p.first_name,
+        p.middle_name,
+        p.last_name,
+        p.dob,
+        p.family_id,
+        p.phone,
+        p.address,
+        trim(
+          coalesce(p.first_name, '') ||
+          CASE
+            WHEN trim(coalesce(p.middle_name, '')) <> '' THEN ' ' || trim(p.middle_name)
+            ELSE ''
+          END ||
+          CASE
+            WHEN trim(coalesce(p.last_name, '')) <> '' THEN ' ' || trim(p.last_name)
+            ELSE ''
+          END
+        ) AS patient_name,
+        (
+          SELECT COUNT(*)
+          FROM visit_medicines vm
+          WHERE vm.visit_id = v.id
+        ) AS medicine_count
+      FROM visits v
+      INNER JOIN patients p ON p.id = v.patient_id
+      WHERE v.visit_date >= ? AND v.visit_date <= ?
+      ORDER BY v.visit_date DESC, v.id DESC
+    `,
+    [startDate, endDate]
+  );
+}
+
 export async function getVisitMedicines(visitId) {
   const database = await getDb();
   return await database.getAllAsync(

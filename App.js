@@ -14,6 +14,7 @@ import SettingsScreen from './src/SettingsScreen';
 import ClinicProfileScreen from './src/ClinicProfileScreen';
 import ManageGesturesScreen from './src/ManageGesturesScreen';
 import TestGestureScreen from './src/TestGestureScreen';
+import AllVisitsScreen from './src/AllVisitsScreen';
 import { GestureInputProvider } from './src/GestureInputProvider';
 
 const Stack = createNativeStackNavigator();
@@ -44,6 +45,11 @@ export default function App() {
             name="Search"
             component={SearchScreen}
             options={{ title: 'Search Patients' }}
+          />
+          <Stack.Screen
+            name="AllVisits"
+            component={AllVisitsScreen}
+            options={{ title: 'All Visits' }}
           />
           <Stack.Screen
             name="PatientDetail"

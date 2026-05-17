@@ -239,6 +239,42 @@ describe('database', () => {
     );
   });
 
+  test('getVisitsInDateRange joins patients and filters by visit_date', async () => {
+    const db = createMockDb();
+    const rows = [
+      {
+        id: 1,
+        patient_id: 9,
+        visit_date: '2026-05-02',
+        complaints: 'Fever',
+        diagnosis: 'URI',
+        visit_cost: 120,
+        patient_name: 'Bob Smith',
+        medicine_count: 2,
+      },
+    ];
+    db.getAllAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('FROM visits v') && sql.includes('visit_date >=')) {
+        expect(params).toEqual(['2026-05-01', '2026-05-31']);
+        return rows;
+      }
+      return [];
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const visits = await database.getVisitsInDateRange({
+      startDate: '2026-05-01',
+      endDate: '2026-05-31',
+    });
+
+    expect(visits).toEqual(rows);
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INNER JOIN patients p ON p.id = v.patient_id'),
+      ['2026-05-01', '2026-05-31']
+    );
+  });
+
   test('gesture helpers list, insert, and delete gestures', async () => {
     const db = createMockDb();
     db.getAllAsync.mockImplementation(async (sql) => {

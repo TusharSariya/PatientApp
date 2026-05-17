@@ -27,6 +27,15 @@ export default function HomeScreen({ navigation }) {
 
       <TouchableOpacity
         style={styles.card}
+        onPress={() => navigation.navigate('AllVisits')}
+      >
+        <Text style={styles.cardIcon}>📅</Text>
+        <Text style={styles.cardTitle}>All Visits</Text>
+        <Text style={styles.cardDesc}>View visits across all patients by date range</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.card}
         onPress={() => navigation.navigate('ClinicProfile')}
       >
         <Text style={styles.cardIcon}>👤</Text>
