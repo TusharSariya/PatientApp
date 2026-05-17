@@ -21,6 +21,7 @@ import {
 } from './database';
 import { useGestureTextInput } from './GestureInputProvider';
 import MedicationFrequencyField from './MedicationFrequencyField';
+import { formatMedicineSubtitle } from './medicineDisplay';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
@@ -73,11 +74,7 @@ const sheet = StyleSheet.create({
 });
 
 function MedicineCard({ medicine, onPress }) {
-  const sub = [
-    medicine.dosage,
-    medicine.frequency,
-    medicine.interval_days ? `q${medicine.interval_days}d` : '',
-  ].filter(Boolean).join(' · ');
+  const sub = formatMedicineSubtitle(medicine);
   return (
     <TouchableOpacity style={styles.medCard} onPress={onPress} activeOpacity={0.75}>
       <View style={{ flex: 1 }}>

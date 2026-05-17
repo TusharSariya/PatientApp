@@ -9,10 +9,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { addVisit, getBalanceSummary, getClinicProfile, getVisitMedicines, getVisits } from './database';
+import { addVisit, getBalanceSummary, getClinicProfile, getMedicines, getVisitMedicines, getVisits } from './database';
 import { buildPrescriptionHtml } from './prescriptionHtml';
 import { sharePrescriptionPdf } from './prescriptionPdf';
 import MedicationFrequencyField from './MedicationFrequencyField';
+import { formatMedicineSubtitle, medicineToDraftForm } from './medicineDisplay';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
@@ -37,6 +38,8 @@ export default function PatientVisitsScreen({ route }) {
   const { patient } = route.params;
   const [visits, setVisits] = useState([]);
   const [visitMedicines, setVisitMedicines] = useState({});
+  const [currentMedicines, setCurrentMedicines] = useState([]);
+  const [currentMedsExpanded, setCurrentMedsExpanded] = useState(false);
   const [balances, setBalances] = useState({
     patientBalance: 0,
     familyBalance: 0,
@@ -69,6 +72,8 @@ export default function PatientVisitsScreen({ route }) {
       setVisitMedicines(Object.fromEntries(medEntries));
       const balanceSummary = await getBalanceSummary(patient.id);
       setBalances(balanceSummary);
+      const activeMeds = await getMedicines(patient.id);
+      setCurrentMedicines(activeMeds);
     } finally {
       setLoading(false);
     }
@@ -327,7 +332,45 @@ export default function PatientVisitsScreen({ route }) {
             ))}
           </View>
 
-          <Text style={styles.sectionTitleInline}>Prescribe Medicines</Text>
+          <TouchableOpacity
+            testID="current-medicines-toggle"
+            style={styles.currentMedsToggle}
+            onPress={() => setCurrentMedsExpanded((open) => !open)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.currentMedsToggleTitle}>
+              Current medicines ({currentMedicines.length})
+            </Text>
+            <Text style={styles.currentMedsToggleChevron}>{currentMedsExpanded ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+          {currentMedsExpanded ? (
+            <>
+              <Text style={styles.currentMedsHint}>Tap a medicine to pre-fill the form below.</Text>
+              {currentMedicines.length === 0 ? (
+                <Text style={styles.currentMedsEmpty}>No medicines on file.</Text>
+              ) : (
+                currentMedicines.map((med) => {
+                  const subtitle = formatMedicineSubtitle(med);
+                  return (
+                    <TouchableOpacity
+                      key={med.id}
+                      style={styles.currentMedRow}
+                      onPress={() => setDraftMed(medicineToDraftForm(med))}
+                      activeOpacity={0.75}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.currentMedName}>{med.name}</Text>
+                        {subtitle ? <Text style={styles.currentMedSub}>{subtitle}</Text> : null}
+                      </View>
+                      <Text style={styles.currentMedChevron}>›</Text>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </>
+          ) : null}
+
+          <Text style={[styles.sectionTitleInline, { marginTop: 20 }]}>Prescribe Medicines</Text>
           <TextInput
             style={styles.input}
             value={draftMed.name}
@@ -498,6 +541,66 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#1a1a2e',
+  },
+  currentMedsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#e9eeff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  currentMedsToggleTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2f46c7',
+  },
+  currentMedsToggleChevron: {
+    fontSize: 12,
+    color: '#4f6ef7',
+    fontWeight: '700',
+  },
+  currentMedsHint: {
+    fontSize: 13,
+    color: '#5f6d8a',
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  currentMedsEmpty: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 8,
+  },
+  currentMedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f7f9ff',
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  currentMedName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+  currentMedSub: {
+    fontSize: 13,
+    color: '#5f6d8a',
+    marginTop: 2,
+  },
+  currentMedChevron: {
+    fontSize: 20,
+    color: '#4f6ef7',
+    fontWeight: '600',
   },
   label: {
     fontSize: 13,
