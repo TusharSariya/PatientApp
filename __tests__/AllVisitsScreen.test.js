@@ -35,6 +35,21 @@ describe('AllVisitsScreen', () => {
         address: 'Two Street',
         medicine_count: 1,
       },
+      {
+        id: 2,
+        patient_id: 10,
+        visit_date: '2026-05-01',
+        visit_cost: 80,
+        patient_name: 'Alice Jones',
+        first_name: 'Alice',
+        middle_name: '',
+        last_name: 'Jones',
+        dob: '',
+        family_id: 3,
+        phone: '555-333',
+        address: 'One Street',
+        medicine_count: 0,
+      },
     ]);
 
     render(<AllVisitsScreen navigation={navigation} />);
@@ -52,9 +67,10 @@ describe('AllVisitsScreen', () => {
     });
 
     expect(screen.getByText('Bob Smith')).toBeTruthy();
-    expect(screen.getByText(/Complaints: Headache/)).toBeTruthy();
-    expect(screen.getByText(/Diagnosis: Migraine/)).toBeTruthy();
-    expect(screen.getByText('1 visit')).toBeTruthy();
+    expect(screen.getByText('Alice Jones')).toBeTruthy();
+    expect(screen.getByText('$150.00')).toBeTruthy();
+    expect(screen.getByText('$80.00')).toBeTruthy();
+    expect(screen.getByText('2 visits')).toBeTruthy();
   });
 
   test('navigates to PatientVisits when a visit card is tapped', async () => {

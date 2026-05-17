@@ -23,3 +23,21 @@ export function formatDateLabel(value) {
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString();
 }
+
+export function groupVisitsByDate(visits) {
+  const sections = [];
+  for (const visit of visits) {
+    const dateKey = visit.visit_date;
+    const last = sections[sections.length - 1];
+    if (last?.dateKey === dateKey) {
+      last.data.push(visit);
+    } else {
+      sections.push({ dateKey, data: [visit] });
+    }
+  }
+  return sections.map(({ dateKey, data }) => ({
+    title: formatDateLabel(dateKey),
+    dateKey,
+    data,
+  }));
+}

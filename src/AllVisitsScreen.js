@@ -1,8 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { getVisitsInDateRange } from './database';
 import {
-  formatDateLabel,
+  groupVisitsByDate,
   isValidIsoDate,
   startOfMonthIsoDate,
   todayIsoDate,
@@ -37,27 +37,11 @@ function visitToPatient(row) {
 
 function VisitCard({ visit, onPress }) {
   return (
-    <TouchableOpacity style={styles.visitCard} onPress={onPress} activeOpacity={0.75}>
-      <View style={styles.visitHeader}>
-        <Text style={styles.patientName}>{visit.patient_name}</Text>
-        <Text style={styles.visitDate}>{formatDateLabel(visit.visit_date)}</Text>
-      </View>
-      {visit.complaints ? (
-        <Text style={styles.visitDetail} numberOfLines={2}>
-          Complaints: {visit.complaints}
-        </Text>
-      ) : null}
-      {visit.diagnosis ? (
-        <Text style={styles.visitDetail} numberOfLines={2}>
-          Diagnosis: {visit.diagnosis}
-        </Text>
-      ) : null}
-      <Text style={styles.visitCost}>Visit Cost: {formatCurrency(visit.visit_cost)}</Text>
-      {visit.medicine_count > 0 ? (
-        <Text style={styles.medicineCount}>
-          {visit.medicine_count} medicine{visit.medicine_count === 1 ? '' : 's'} prescribed
-        </Text>
-      ) : null}
+    <TouchableOpacity style={styles.visitRow} onPress={onPress} activeOpacity={0.75}>
+      <Text style={styles.patientName} numberOfLines={1}>
+        {visit.patient_name}
+      </Text>
+      <Text style={styles.visitCost}>{formatCurrency(visit.visit_cost)}</Text>
     </TouchableOpacity>
   );
 }
@@ -99,6 +83,8 @@ export default function AllVisitsScreen({ navigation }) {
     }
   }, [startDate, endDate]);
 
+  const sections = useMemo(() => groupVisitsByDate(visits), [visits]);
+
   return (
     <View style={styles.container}>
       <View style={styles.filterCard}>
@@ -136,10 +122,11 @@ export default function AllVisitsScreen({ navigation }) {
       {loading ? (
         <ActivityIndicator style={styles.loader} size="large" color="#4f6ef7" />
       ) : (
-        <FlatList
-          data={visits}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
+          stickySectionHeadersEnabled
           ListHeaderComponent={
             hasSearched ? (
               <Text style={styles.resultCount}>
@@ -154,6 +141,11 @@ export default function AllVisitsScreen({ navigation }) {
               <Text style={styles.empty}>Choose a date range and tap View visits.</Text>
             )
           }
+          renderSectionHeader={({ section }) => (
+            <View style={styles.dateHeader}>
+              <Text style={styles.dateHeaderText}>{section.title}</Text>
+            </View>
+          )}
           renderItem={({ item }) => (
             <VisitCard
               visit={item}
@@ -232,55 +224,44 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontWeight: '600',
   },
+  dateHeader: {
+    backgroundColor: '#f5f6fa',
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
+  dateHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5f6d8a',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   empty: {
     textAlign: 'center',
     color: '#888',
     fontSize: 15,
     marginTop: 24,
   },
-  visitCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  visitHeader: {
+  visitRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 6,
   },
   patientName: {
     flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#1a1a2e',
     marginRight: 12,
   },
-  visitDate: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4f6ef7',
-  },
-  visitDetail: {
-    fontSize: 14,
-    color: '#5f6d8a',
-    marginBottom: 4,
-  },
   visitCost: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a2e',
-    marginTop: 4,
-  },
-  medicineCount: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 6,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4f6ef7',
   },
 });

@@ -1,5 +1,6 @@
 import {
   formatDateLabel,
+  groupVisitsByDate,
   isValidIsoDate,
   startOfMonthIsoDate,
   todayIsoDate,
@@ -26,5 +27,18 @@ describe('visitDates', () => {
     const label = formatDateLabel('2026-05-01');
     expect(label).toBeTruthy();
     expect(label).not.toBe('2026-05-01');
+  });
+
+  test('groupVisitsByDate groups consecutive visits by visit_date', () => {
+    const visits = [
+      { id: 1, visit_date: '2026-05-03' },
+      { id: 2, visit_date: '2026-05-03' },
+      { id: 3, visit_date: '2026-05-01' },
+    ];
+    const sections = groupVisitsByDate(visits);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].dateKey).toBe('2026-05-03');
+    expect(sections[0].data).toHaveLength(2);
+    expect(sections[1].dateKey).toBe('2026-05-01');
   });
 });
