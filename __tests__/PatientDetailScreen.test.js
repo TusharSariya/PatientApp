@@ -1,12 +1,27 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+jest.mock('@react-navigation/native', () => {
+  const ReactNative = jest.requireActual('@react-navigation/native');
+  const React = require('react');
+  return {
+    ...ReactNative,
+    useFocusEffect: (effect) => {
+      React.useEffect(() => effect(), [effect]);
+    },
+  };
+});
+
 import PatientDetailScreen from '../src/PatientDetailScreen';
 import { useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { clearDictationOwner } from '../src/dictationOwner';
 
 jest.mock('../src/database', () => ({
   getGestures: jest.fn().mockResolvedValue([]),
+  getBalanceSummary: jest.fn().mockResolvedValue({
+    patientBalance: 0,
+    familyBalance: 0,
+  }),
 }));
 
 jest.mock('expo-speech-recognition', () => ({
@@ -31,7 +46,7 @@ describe('PatientDetailScreen', () => {
     });
   });
 
-  test('opens dedicated medicines screen from Rx tab', () => {
+  test('opens medicines screen', () => {
     const patient = {
       id: 5,
       name: 'Alice Johnson',
@@ -42,11 +57,24 @@ describe('PatientDetailScreen', () => {
 
     render(<PatientDetailScreen route={{ params: { patient } }} navigation={navigation} />);
 
-    fireEvent.press(screen.getByText('Rx'));
-    fireEvent.press(screen.getByText('Open'));
+    const openButtons = screen.getAllByText('Open');
+    fireEvent.press(openButtons[openButtons.length - 1]);
 
     expect(navigation.navigate).toHaveBeenCalledWith('PatientMedicines', { patient });
-    expect(screen.queryByText('No medicines added yet.')).toBeNull();
+  });
+
+  test('does not render Rx tab', () => {
+    const patient = {
+      id: 5,
+      name: 'Alice Johnson',
+      phone: '555-111',
+      address: 'One Street',
+    };
+
+    render(<PatientDetailScreen route={{ params: { patient } }} navigation={{ navigate: jest.fn() }} />);
+
+    expect(screen.queryByText('Rx')).toBeNull();
+    expect(screen.queryByText('Complaints')).toBeNull();
   });
 
   test('dictation inserts into existing field text instead of overwriting', async () => {

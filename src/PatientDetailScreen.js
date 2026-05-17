@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   Alert,
   Keyboard,
@@ -49,24 +48,6 @@ function composeHandlers(...handlers) {
   };
 }
 
-function TabBar({ active, onChange }) {
-  const tabs = ['Personal', 'Rx'];
-  return (
-    <View style={styles.tabBar}>
-      {tabs.map((tab) => (
-        <TouchableOpacity
-          key={tab}
-          style={[styles.tab, active === tab && styles.tabActive]}
-          onPress={() => onChange(tab)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.tabText, active === tab && styles.tabTextActive]}>{tab}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
 const Field = React.forwardRef(({
   label,
   value,
@@ -77,7 +58,6 @@ const Field = React.forwardRef(({
   selection,
   showSoftInputOnFocus,
   multiline,
-  keyboardType,
 }, ref) => (
   <View style={styles.fieldGroup}>
     <Text style={styles.fieldLabel}>{label}</Text>
@@ -94,7 +74,6 @@ const Field = React.forwardRef(({
       multiline={multiline}
       numberOfLines={multiline ? 3 : 1}
       textAlignVertical={multiline ? 'top' : 'center'}
-      keyboardType={keyboardType}
       placeholderTextColor="#bbb"
       placeholder="—"
     />
@@ -103,41 +82,16 @@ const Field = React.forwardRef(({
 
 export default function PatientDetailScreen({ route, navigation }) {
   const { patient } = route.params;
-  const [activeTab, setActiveTab] = useState('Personal');
   const [recognizing, setRecognizing] = useState(false);
   const [balances, setBalances] = useState({ patientBalance: 0, familyBalance: 0 });
-
-  // Personal fields
   const [notes, setNotes] = useState('');
 
-  // Rx fields
-  const [complaints, setComplaints] = useState('');
-  const [diagnosis, setDiagnosis] = useState('');
-  const [investigations, setInvestigations] = useState('');
-  const [procedures, setProcedures] = useState('');
-  const [findings, setFindings] = useState('');
-  const [bp, setBp] = useState('');
-  const [weight, setWeight] = useState('');
-  const [weightUnit, setWeightUnit] = useState('kg');
-
-  // Refs
   const notesRef = useRef(null);
-  const complaintsRef = useRef(null);
-  const diagnosisRef = useRef(null);
-  const investigationsRef = useRef(null);
-  const proceduresRef = useRef(null);
-  const findingsRef = useRef(null);
-  const bpRef = useRef(null);
-  const weightRef = useRef(null);
-
   const notesInput = useGestureTextInput({ label: 'Notes', value: notes, setValue: setNotes, inputRef: notesRef });
-  const complaintsInput = useGestureTextInput({ label: 'Complaints', value: complaints, setValue: setComplaints, inputRef: complaintsRef });
-  const diagnosisInput = useGestureTextInput({ label: 'Diagnosis', value: diagnosis, setValue: setDiagnosis, inputRef: diagnosisRef });
-  const investigationsInput = useGestureTextInput({ label: 'Investigations', value: investigations, setValue: setInvestigations, inputRef: investigationsRef });
-  const proceduresInput = useGestureTextInput({ label: 'Procedures', value: procedures, setValue: setProcedures, inputRef: proceduresRef });
-  const findingsInput = useGestureTextInput({ label: 'Findings', value: findings, setValue: setFindings, inputRef: findingsRef });
-  const bpInput = useGestureTextInput({ label: 'Blood Pressure', value: bp, setValue: setBp, inputRef: bpRef });
-  const weightInput = useGestureTextInput({ label: 'Weight', value: weight, setValue: setWeight, inputRef: weightRef });
+
+  const dictationFields = [
+    { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true, input: notesInput },
+  ];
 
   const activeIndexRef = useRef(0);
   const shouldAdvanceRef = useRef(false);
@@ -186,22 +140,6 @@ export default function PatientDetailScreen({ route, navigation }) {
     }, [patient.id])
   );
 
-  const personalFields = [
-    { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true, input: notesInput },
-  ];
-
-  const rxFields = [
-    { ref: complaintsRef, setter: setComplaints, value: complaints, label: 'Complaints', multiline: true, input: complaintsInput },
-    { ref: diagnosisRef, setter: setDiagnosis, value: diagnosis, label: 'Diagnosis', multiline: true, input: diagnosisInput },
-    { ref: investigationsRef, setter: setInvestigations, value: investigations, label: 'Investigations', multiline: true, input: investigationsInput },
-    { ref: proceduresRef, setter: setProcedures, value: procedures, label: 'Procedures', multiline: true, input: proceduresInput },
-    { ref: findingsRef, setter: setFindings, value: findings, label: 'Findings', multiline: true, input: findingsInput },
-    { ref: bpRef, setter: setBp, value: bp, label: 'Blood Pressure (mmHg)', multiline: false, input: bpInput },
-    { ref: weightRef, setter: setWeight, value: weight, label: 'Weight', multiline: false, keyboardType: 'decimal-pad', input: weightInput },
-  ];
-
-  const currentFields = activeTab === 'Personal' ? personalFields : rxFields;
-
   useSpeechRecognitionEvent('start', () => {
     if (getDictationOwner() !== dictationOwner) return;
     lastTranscriptRef.current = '';
@@ -214,15 +152,15 @@ export default function PatientDetailScreen({ route, navigation }) {
     setRecognizing(false);
     if (shouldAdvanceRef.current) {
       shouldAdvanceRef.current = false;
-      const next = (activeIndexRef.current + 1) % currentFields.length;
+      const next = (activeIndexRef.current + 1) % dictationFields.length;
       activeIndexRef.current = next;
-      currentFields[next]?.ref.current?.focus();
+      dictationFields[next]?.ref.current?.focus();
     }
   });
   useSpeechRecognitionEvent('result', (event) => {
     if (getDictationOwner() !== dictationOwner) return;
     const text = (event.results[0]?.transcript ?? '').trim();
-    const field = currentFields[activeIndexRef.current];
+    const field = dictationFields[activeIndexRef.current];
     if (!text || !field) return;
 
     if (text === lastTranscriptRef.current) return;
@@ -243,11 +181,6 @@ export default function PatientDetailScreen({ route, navigation }) {
     Alert.alert('Dictation error', event.message ?? 'Something went wrong.');
     setRecognizing(false);
   });
-
-  function handleTabChange(tab) {
-    activeIndexRef.current = 0;
-    setActiveTab(tab);
-  }
 
   function openMedicines() {
     navigation.navigate('PatientMedicines', { patient });
@@ -282,123 +215,60 @@ export default function PatientDetailScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <TabBar active={activeTab} onChange={handleTabChange} />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.infoCard}>
+          <Text style={styles.name}>{patient.name}</Text>
+          {patient.family_id ? <Text style={styles.detail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
+          {patient.dob ? <Text style={styles.detail}>🎂 {patient.dob}</Text> : null}
+          <Text style={styles.detail}>📞 {patient.phone}</Text>
+          <Text style={styles.detail}>📍 {patient.address}</Text>
+          <Text style={styles.detail}>Patient Balance: ${Number(balances.patientBalance ?? 0).toFixed(2)}</Text>
+          <Text style={styles.detail}>Family Balance: ${Number(balances.familyBalance ?? 0).toFixed(2)}</Text>
+        </View>
 
-      {activeTab === 'Personal' ? (
-        <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.infoCard}>
-            <Text style={styles.name}>{patient.name}</Text>
-            {patient.family_id ? <Text style={styles.detail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
-            {patient.dob ? <Text style={styles.detail}>🎂 {patient.dob}</Text> : null}
-            <Text style={styles.detail}>📞 {patient.phone}</Text>
-            <Text style={styles.detail}>📍 {patient.address}</Text>
-            <Text style={styles.detail}>Patient Balance: ${Number(balances.patientBalance ?? 0).toFixed(2)}</Text>
-            <Text style={styles.detail}>Family Balance: ${Number(balances.familyBalance ?? 0).toFixed(2)}</Text>
+        <TouchableOpacity style={styles.medCard} onPress={openEditPatient} activeOpacity={0.8}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.medTitle}>Patient Details</Text>
+            <Text style={styles.medSubtitle}>Open editable demographics and contact details.</Text>
           </View>
-
-          <TouchableOpacity style={styles.medCard} onPress={openEditPatient} activeOpacity={0.8}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.medTitle}>Patient Details</Text>
-              <Text style={styles.medSubtitle}>Open editable demographics and contact details.</Text>
-            </View>
-            <View style={styles.medButton}>
-              <Text style={styles.medButtonText}>Open</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.medTitle}>Visits</Text>
-              <Text style={styles.medSubtitle}>View visit history and create a new visit.</Text>
-            </View>
-            <View style={styles.medButton}>
-              <Text style={styles.medButtonText}>Open</Text>
-            </View>
-          </TouchableOpacity>
-          {personalFields.map((f, i) => (
-            <Field
-              key={f.label}
-              ref={f.ref}
-              label={f.label}
-              value={f.value}
-              onChange={f.setter}
-              onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
-              onBlur={f.input.onBlur}
-              onSelectionChange={f.input.onSelectionChange}
-              selection={f.input.selection}
-              showSoftInputOnFocus={f.input.showSoftInputOnFocus}
-              multiline={f.multiline}
-            />
-          ))}
-        </ScrollView>
-      ) : (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentContainerStyle={styles.tabContent} keyboardShouldPersistTaps="handled">
-            <View style={styles.medCard}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.medTitle}>Medicines</Text>
-                <Text style={styles.medSubtitle}>Open full list, add/remove meds, and view previous medicine history.</Text>
-              </View>
-              <TouchableOpacity style={styles.medButton} onPress={openMedicines}>
-                <Text style={styles.medButtonText}>Open</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.divider} />
-
-            {rxFields.map((f, i) =>
-              f.label === 'Weight' ? (
-                <View key={f.label} style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Weight</Text>
-                  <View style={styles.weightRow}>
-                    <TextInput
-                      ref={f.ref}
-                      style={[styles.fieldInput, styles.weightInput]}
-                      value={f.value}
-                      onChangeText={f.setter}
-                      showSoftInputOnFocus={f.input.showSoftInputOnFocus}
-                      onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
-                      onBlur={f.input.onBlur}
-                      onSelectionChange={f.input.onSelectionChange}
-                      selection={f.input.selection}
-                      keyboardType="decimal-pad"
-                      placeholder="—"
-                      placeholderTextColor="#bbb"
-                    />
-                    <View style={styles.unitToggle}>
-                      {['kg', 'lbs'].map((unit) => (
-                        <TouchableOpacity
-                          key={unit}
-                          style={[styles.unitBtn, weightUnit === unit && styles.unitBtnActive]}
-                          onPress={() => setWeightUnit(unit)}
-                        >
-                          <Text style={[styles.unitBtnText, weightUnit === unit && styles.unitBtnTextActive]}>
-                            {unit}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-              ) : (
-                <Field
-                  key={f.label}
-                  ref={f.ref}
-                  label={f.label}
-                  value={f.value}
-                  onChange={f.setter}
-                  onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
-                  onBlur={f.input.onBlur}
-                  onSelectionChange={f.input.onSelectionChange}
-                  selection={f.input.selection}
-                  showSoftInputOnFocus={f.input.showSoftInputOnFocus}
-                  multiline={f.multiline}
-                  keyboardType={f.keyboardType}
-                />
-              )
-            )}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      )}
+          <View style={styles.medButton}>
+            <Text style={styles.medButtonText}>Open</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.medTitle}>Visits</Text>
+            <Text style={styles.medSubtitle}>View visit history and create a new visit.</Text>
+          </View>
+          <View style={styles.medButton}>
+            <Text style={styles.medButtonText}>Open</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openMedicines} activeOpacity={0.8}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.medTitle}>Medicines</Text>
+            <Text style={styles.medSubtitle}>View current medicines and history.</Text>
+          </View>
+          <View style={styles.medButton}>
+            <Text style={styles.medButtonText}>Open</Text>
+          </View>
+        </TouchableOpacity>
+        {dictationFields.map((f, i) => (
+          <Field
+            key={f.label}
+            ref={f.ref}
+            label={f.label}
+            value={f.value}
+            onChange={f.setter}
+            onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
+            onBlur={f.input.onBlur}
+            onSelectionChange={f.input.onSelectionChange}
+            selection={f.input.selection}
+            showSoftInputOnFocus={f.input.showSoftInputOnFocus}
+            multiline={f.multiline}
+          />
+        ))}
+      </ScrollView>
 
       <Animated.View style={[styles.fab, { bottom: fabBottom }]}>
         <Pressable
@@ -419,31 +289,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f6fa',
   },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e8e8e8',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: '#4f6ef7',
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#999',
-  },
-  tabTextActive: {
-    color: '#4f6ef7',
-  },
-  tabContent: {
+  content: {
     padding: 24,
     paddingBottom: 100,
     flexGrow: 1,
@@ -502,11 +348,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#e8e8e8',
-    marginVertical: 24,
-  },
   fieldGroup: {
     marginBottom: 20,
   },
@@ -531,37 +372,6 @@ const styles = StyleSheet.create({
   fieldInputMultiline: {
     height: 88,
     textAlignVertical: 'top',
-  },
-  weightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  weightInput: {
-    flex: 1,
-  },
-  unitToggle: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  unitBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-  },
-  unitBtnActive: {
-    backgroundColor: '#4f6ef7',
-  },
-  unitBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#999',
-  },
-  unitBtnTextActive: {
-    color: '#fff',
   },
   fab: {
     position: 'absolute',
