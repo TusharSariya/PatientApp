@@ -12,9 +12,9 @@ import {
 import { addVisit, getBalanceSummary, getClinicProfile, getVisitMedicines, getVisits } from './database';
 import { buildPrescriptionHtml } from './prescriptionHtml';
 import { sharePrescriptionPdf } from './prescriptionPdf';
+import MedicationFrequencyField from './MedicationFrequencyField';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-const FREQUENCIES_PER_DAY = [1, 2, 3, 4, 5, 6, 7, 8];
 const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
 const EMPTY_MED = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
 
@@ -342,23 +342,10 @@ export default function PatientVisitsScreen({ route }) {
             placeholder="Dosage"
             placeholderTextColor="#bbb"
           />
-          <Text style={styles.label}>Frequency (times per day)</Text>
-          <View style={styles.routeRow}>
-            {FREQUENCIES_PER_DAY.map((times) => {
-              const value = `${times}x/day`;
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.routeChip, draftMed.frequency === value && styles.routeChipActive]}
-                  onPress={() => setDraftMed((m) => ({ ...m, frequency: value }))}
-                >
-                  <Text style={[styles.routeChipText, draftMed.frequency === value && styles.routeChipTextActive]}>
-                    {times}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <MedicationFrequencyField
+            value={draftMed.frequency}
+            onChange={(frequency) => setDraftMed((m) => ({ ...m, frequency }))}
+          />
           <TextInput
             style={styles.input}
             value={draftMed.duration}

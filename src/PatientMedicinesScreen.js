@@ -20,9 +20,9 @@ import {
   getMedicines,
 } from './database';
 import { useGestureTextInput } from './GestureInputProvider';
+import MedicationFrequencyField from './MedicationFrequencyField';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-const FREQUENCIES_PER_DAY = [1, 2, 3, 4, 5, 6, 7, 8];
 const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
 const EMPTY_FORM = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
 
@@ -302,23 +302,10 @@ export default function PatientMedicinesScreen({ route }) {
             placeholderTextColor="#bbb"
           />
 
-          <Text style={styles.fieldLabel}>Frequency (times per day)</Text>
-          <View style={styles.routeRow}>
-            {FREQUENCIES_PER_DAY.map((times) => {
-              const value = `${times}x/day`;
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.routeChip, medForm.frequency === value && styles.routeChipActive]}
-                  onPress={() => setMedForm(f => ({ ...f, frequency: value }))}
-                >
-                  <Text style={[styles.routeChipText, medForm.frequency === value && styles.routeChipTextActive]}>
-                    {times}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <MedicationFrequencyField
+            value={medForm.frequency}
+            onChange={(frequency) => setMedForm((f) => ({ ...f, frequency }))}
+          />
 
           <Text style={styles.fieldLabel}>Interval Between Days</Text>
           <View style={styles.routeRow}>

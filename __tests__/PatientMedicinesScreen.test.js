@@ -55,7 +55,7 @@ describe('PatientMedicinesScreen', () => {
     fireEvent.press(screen.getByText('+ Add'));
     fireEvent.changeText(screen.getByPlaceholderText('e.g. Amoxicillin'), '  Amoxicillin  ');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. 500mg'), ' 500mg ');
-    fireEvent.changeText(screen.getByPlaceholderText('e.g. Twice daily'), ' Three times daily ');
+    fireEvent.press(screen.getByTestId('frequency-preset-3'));
     fireEvent.changeText(screen.getByPlaceholderText('e.g. 7 days'), ' 7 days ');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. Take after meals'), ' after meals ');
 
@@ -65,7 +65,8 @@ describe('PatientMedicinesScreen', () => {
       expect(addMedicine).toHaveBeenCalledWith(9, {
         name: 'Amoxicillin',
         dosage: '500mg',
-        frequency: 'Three times daily',
+        frequency: '3x/day',
+        intervalDays: 1,
         duration: '7 days',
         route: 'Oral',
         instructions: 'after meals',
