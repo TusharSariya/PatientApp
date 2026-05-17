@@ -20,6 +20,12 @@ export function formatVisitDateDisplay(isoDate) {
   return trimmed;
 }
 
+export function formatCurrency(value) {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount)) return '0.00';
+  return amount.toFixed(2);
+}
+
 export function formatMedicineLine(med) {
   const name = med?.name?.trim?.() || '';
   const dosage = med?.dosage?.trim?.() || '';
@@ -65,6 +71,7 @@ export function buildPrescriptionHtml({ patient, visit, medicines = [], clinic =
   const dt = escapeHtml(formatVisitDateDisplay(visit?.visit_date));
   const ptName = escapeHtml(patient?.name ?? '');
   const diagnosisHtml = escapeHtml((visit?.diagnosis ?? '').trim() || '—').replace(/\n/g, '<br/>');
+  const visitCostStr = escapeHtml(formatCurrency(visit?.visit_cost));
 
   const medBlocks = (medicines || []).length
     ? (medicines || [])
@@ -136,6 +143,7 @@ export function buildPrescriptionHtml({ patient, visit, medicines = [], clinic =
     <div><span class="label">Dt:-</span> ${dt}</div>
   </div>
   <div style="margin-top:6px"><span class="label">Name :-</span> ${ptName}</div>
+  <div style="margin-top:6px"><span class="label">Visit Cost :-</span> ${visitCostStr}</div>
   <div class="section">
     <div class="section-title">Diagnosis :-</div>
     <div class="body-text">${diagnosisHtml}</div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import PatientVisitsScreen from '../src/PatientVisitsScreen';
@@ -99,5 +100,37 @@ describe('PatientVisitsScreen', () => {
     expect(screen.getByPlaceholderText('Medicine name').props.value).toBe('Ibuprofen');
     expect(screen.getByPlaceholderText('Dosage').props.value).toBe('400mg');
     expect(screen.getByPlaceholderText('Duration').props.value).toBe('5 days');
+  });
+
+  test('can edit and delete prescribed medicines before creating visit', async () => {
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      buttons?.find((button) => button.text === 'Remove')?.onPress?.();
+    });
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    fireEvent.changeText(screen.getByPlaceholderText('Medicine name'), 'Aspirin');
+    fireEvent.changeText(screen.getByPlaceholderText('Dosage'), '100mg');
+    fireEvent.press(screen.getByText('+ Add Prescribed Medicine'));
+
+    expect(screen.getByText('Aspirin')).toBeTruthy();
+    expect(screen.getByText('100mg · q1d')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('edit-draft-med-1'));
+    expect(screen.getByText('Update Prescribed Medicine')).toBeTruthy();
+
+    fireEvent.changeText(screen.getByPlaceholderText('Medicine name'), 'Aspirin EC');
+    fireEvent.press(screen.getByText('Update Prescribed Medicine'));
+
+    expect(screen.getByText('Aspirin EC')).toBeTruthy();
+    expect(screen.queryByText('Aspirin')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('delete-draft-med-1'));
+
+    expect(screen.queryByText('Aspirin EC')).toBeNull();
   });
 });

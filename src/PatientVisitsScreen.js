@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -59,6 +59,8 @@ export default function PatientVisitsScreen({ route }) {
   const [notes, setNotes] = useState('');
   const [draftMed, setDraftMed] = useState(EMPTY_MED);
   const [prescribedMeds, setPrescribedMeds] = useState([]);
+  const [editingDraftId, setEditingDraftId] = useState(null);
+  const nextDraftIdRef = useRef(0);
   const [visitCost, setVisitCost] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentScope, setPaymentScope] = useState('patient');
@@ -105,7 +107,7 @@ export default function PatientVisitsScreen({ route }) {
         paymentAmount: paymentAmount.trim() || 0,
         paymentScope,
         familyId: patient.family_id,
-        medicines: prescribedMeds,
+        medicines: prescribedMeds.map(({ draftId: _draftId, ...med }) => med),
       });
       setComplaints('');
       setDiagnosis('');
@@ -117,6 +119,7 @@ export default function PatientVisitsScreen({ route }) {
       setWeightUnit('kg');
       setNotes('');
       setPrescribedMeds([]);
+      setEditingDraftId(null);
       setDraftMed(EMPTY_MED);
       setVisitCost('');
       setPaymentAmount('');
@@ -152,24 +155,73 @@ export default function PatientVisitsScreen({ route }) {
     }
   }
 
+  function buildDraftMedicineEntry(draftId) {
+    return {
+      draftId,
+      name: draftMed.name.trim(),
+      dosage: draftMed.dosage.trim(),
+      frequency: draftMed.frequency.trim(),
+      intervalDays: draftMed.intervalDays,
+      duration: draftMed.duration.trim(),
+      route: draftMed.route,
+      instructions: draftMed.instructions.trim(),
+    };
+  }
+
   function addDraftMedicine() {
     if (!draftMed.name.trim()) {
       Alert.alert('Required', 'Medicine name is required.');
       return;
     }
-    setPrescribedMeds((current) => [
-      ...current,
+    if (editingDraftId != null) {
+      setPrescribedMeds((current) =>
+        current.map((med) =>
+          med.draftId === editingDraftId ? buildDraftMedicineEntry(editingDraftId) : med
+        )
+      );
+      setEditingDraftId(null);
+    } else {
+      nextDraftIdRef.current += 1;
+      setPrescribedMeds((current) => [...current, buildDraftMedicineEntry(nextDraftIdRef.current)]);
+    }
+    setDraftMed(EMPTY_MED);
+  }
+
+  function startEditDraftMedicine(draftId) {
+    const med = prescribedMeds.find((entry) => entry.draftId === draftId);
+    if (!med) return;
+    setDraftMed({
+      name: med.name,
+      dosage: med.dosage,
+      frequency: med.frequency,
+      intervalDays: med.intervalDays,
+      duration: med.duration,
+      route: med.route,
+      instructions: med.instructions,
+    });
+    setEditingDraftId(draftId);
+  }
+
+  function cancelEditDraftMedicine() {
+    setEditingDraftId(null);
+    setDraftMed(EMPTY_MED);
+  }
+
+  function deleteDraftMedicine(draftId) {
+    Alert.alert('Remove medicine', 'Remove this prescribed medicine from the visit?', [
+      { text: 'Cancel', style: 'cancel' },
       {
-        name: draftMed.name.trim(),
-        dosage: draftMed.dosage.trim(),
-        frequency: draftMed.frequency.trim(),
-        intervalDays: draftMed.intervalDays,
-        duration: draftMed.duration.trim(),
-        route: draftMed.route,
-        instructions: draftMed.instructions.trim(),
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          setPrescribedMeds((current) => current.filter((med) => med.draftId !== draftId));
+          if (editingDraftId === draftId) {
+            setEditingDraftId(null);
+            setDraftMed(EMPTY_MED);
+          }
+        },
       },
     ]);
-    setDraftMed(EMPTY_MED);
   }
 
   return (
@@ -416,16 +468,48 @@ export default function PatientVisitsScreen({ route }) {
             multiline
           />
           <TouchableOpacity style={styles.secondaryButton} onPress={addDraftMedicine}>
-            <Text style={styles.secondaryButtonText}>+ Add Prescribed Medicine</Text>
+            <Text style={styles.secondaryButtonText}>
+              {editingDraftId != null ? 'Update Prescribed Medicine' : '+ Add Prescribed Medicine'}
+            </Text>
           </TouchableOpacity>
-          {prescribedMeds.map((med, index) => (
-            <View key={`${med.name}-${index}`} style={styles.prescribedRow}>
-              <Text style={styles.prescribedText}>
-                {med.name} {med.dosage ? `· ${med.dosage}` : ''} {med.frequency ? `· ${med.frequency}` : ''}
-                {med.intervalDays ? ` · q${med.intervalDays}d` : ''}
-              </Text>
-            </View>
-          ))}
+          {editingDraftId != null ? (
+            <TouchableOpacity style={styles.cancelEditButton} onPress={cancelEditDraftMedicine}>
+              <Text style={styles.cancelEditButtonText}>Cancel edit</Text>
+            </TouchableOpacity>
+          ) : null}
+          {prescribedMeds.map((med) => {
+            const subtitle = formatMedicineSubtitle(med);
+            return (
+              <View key={med.draftId} style={styles.prescribedRow}>
+                <View style={styles.prescribedInfo}>
+                  <Text style={styles.prescribedName}>{med.name}</Text>
+                  {subtitle ? <Text style={styles.prescribedText}>{subtitle}</Text> : null}
+                  {med.duration ? <Text style={styles.prescribedText}>{med.duration}</Text> : null}
+                  {med.instructions ? (
+                    <Text style={styles.prescribedText} numberOfLines={2}>
+                      {med.instructions}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.prescribedActions}>
+                  <TouchableOpacity
+                    style={styles.prescribedActionBtn}
+                    onPress={() => startEditDraftMedicine(med.draftId)}
+                    testID={`edit-draft-med-${med.draftId}`}
+                  >
+                    <Text style={styles.prescribedEditText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.prescribedActionBtn}
+                    onPress={() => deleteDraftMedicine(med.draftId)}
+                    testID={`delete-draft-med-${med.draftId}`}
+                  >
+                    <Text style={styles.prescribedDeleteText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleCreateVisit}
@@ -694,15 +778,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   prescribedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     backgroundColor: '#f3f6ff',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 6,
   },
+  prescribedInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  prescribedName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
   prescribedText: {
     fontSize: 13,
     color: '#34415f',
+    marginTop: 2,
+  },
+  prescribedActions: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  prescribedActionBtn: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  prescribedEditText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4f6ef7',
+  },
+  prescribedDeleteText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#c0392b',
+  },
+  cancelEditButton: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cancelEditButtonText: {
+    fontSize: 13,
+    color: '#5f6d8a',
+    fontWeight: '600',
   },
   saveButton: {
     marginTop: 16,

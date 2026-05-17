@@ -1,6 +1,7 @@
 const {
   escapeHtml,
   formatVisitDateDisplay,
+  formatCurrency,
   formatMedicineLine,
   buildPrescriptionHtml,
 } = require('../src/prescriptionHtml');
@@ -16,6 +17,11 @@ describe('prescriptionHtml', () => {
   test('formatVisitDateDisplay converts ISO date to DD/MM/YYYY', () => {
     expect(formatVisitDateDisplay('2026-04-30')).toBe('30/04/2026');
     expect(formatVisitDateDisplay('')).toBe('—');
+  });
+
+  test('formatCurrency formats amounts to two decimals', () => {
+    expect(formatCurrency(150)).toBe('150.00');
+    expect(formatCurrency(0)).toBe('0.00');
   });
 
   test('formatMedicineLine combines visit_medicine fields', () => {
@@ -37,7 +43,7 @@ describe('prescriptionHtml', () => {
   test('buildPrescriptionHtml includes escaped patient name and diagnosis', () => {
     const html = buildPrescriptionHtml({
       patient: { id: 42, name: 'Mr <Evil> Test' },
-      visit: { visit_date: '2026-01-15', diagnosis: 'URI' },
+      visit: { visit_date: '2026-01-15', diagnosis: 'URI', visit_cost: 180 },
       medicines: [{ name: 'Med A', dosage: '10mg', frequency: '', interval_days: 1, duration: '', route: 'Oral', instructions: '' }],
       clinic: { doctorName: 'Dr Good', qualifications: '', address: '', contact: '', registration: '', hours: '' },
       patientBalance: 12.5,
@@ -50,6 +56,8 @@ describe('prescriptionHtml', () => {
     expect(html).toContain('15/01/2026');
     expect(html).toContain('Med A');
     expect(html).toContain('12.50');
+    expect(html).toContain('Visit Cost :-');
+    expect(html).toContain('180.00');
   });
 
   test('buildPrescriptionHtml shows empty treatment message when no medicines', () => {
