@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, StyleSheet } from 'react-native';
 
 export default function HomeScreen({ navigation }) {
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Patient Manager</Text>
       <Text style={styles.subtitle}>What would you like to do?</Text>
 
@@ -51,7 +51,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.cardTitle}>Settings</Text>
         <Text style={styles.cardDesc}>Manage gestures and preferences</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -59,8 +59,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f6fa',
+  },
+  content: {
     padding: 28,
-    justifyContent: 'center',
+    paddingTop: 64,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 32,
