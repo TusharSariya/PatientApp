@@ -134,6 +134,44 @@ describe('PatientVisitsScreen', () => {
     expect(screen.getByPlaceholderText('Duration').props.value).toBe('5 days');
   });
 
+  test('adjusts visit medicine interval with stepper controls', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    expect(screen.getByTestId('visit-medicine-interval-value').props.children).toBe(1);
+    fireEvent.press(screen.getByTestId('visit-medicine-interval-minus-5'));
+    expect(screen.getByTestId('visit-medicine-interval-value').props.children).toBe(1);
+    fireEvent.press(screen.getByTestId('visit-medicine-interval-plus-1'));
+    expect(screen.getByTestId('visit-medicine-interval-value').props.children).toBe(2);
+    fireEvent.press(screen.getByTestId('visit-medicine-interval-minus-1'));
+    expect(screen.getByTestId('visit-medicine-interval-value').props.children).toBe(1);
+
+    fireEvent.press(screen.getByTestId('visit-medicine-interval-plus-5'));
+    fireEvent.changeText(screen.getByPlaceholderText('Medicine name'), 'Aspirin');
+    fireEvent.press(screen.getByText('+ Add Prescribed Medicine'));
+
+    expect(screen.getByText('Aspirin')).toBeTruthy();
+    expect(screen.getByText('q6d')).toBeTruthy();
+    expect(screen.getByTestId('visit-medicine-interval-value').props.children).toBe(1);
+  });
+
+  test('clamps visit medicine interval to 30 days', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    for (let i = 0; i < 6; i += 1) {
+      fireEvent.press(screen.getByTestId('visit-medicine-interval-plus-5'));
+    }
+
+    expect(screen.getByTestId('visit-medicine-interval-value').props.children).toBe(30);
+  });
+
   test('can edit and delete prescribed medicines before creating visit', async () => {
     jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
       buttons?.find((button) => button.text === 'Remove')?.onPress?.();

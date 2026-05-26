@@ -15,6 +15,17 @@ jest.mock('../src/database', () => ({
   getMedicineHistory: jest.fn(),
 }));
 
+jest.mock('../src/GestureInputProvider', () => ({
+  useGestureTextInput: () => ({
+    ref: { current: null },
+    showSoftInputOnFocus: true,
+    onFocus: jest.fn(),
+    onBlur: jest.fn(),
+    onSelectionChange: jest.fn(),
+    selection: { start: 0, end: 0 },
+  }),
+}));
+
 describe('PatientMedicinesScreen', () => {
   const patient = {
     id: 9,
@@ -72,5 +83,42 @@ describe('PatientMedicinesScreen', () => {
         instructions: 'after meals',
       });
     });
+  });
+
+  test('saves adjusted medicine interval from the stepper', async () => {
+    render(<PatientMedicinesScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(getMedicines).toHaveBeenCalledWith(9));
+
+    fireEvent.press(screen.getByText('+ Add'));
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. Amoxicillin'), 'Amoxicillin');
+    fireEvent.press(screen.getByTestId('patient-medicine-interval-plus-5'));
+    fireEvent.press(screen.getByText('Save Medicine'));
+
+    await waitFor(() => {
+      expect(addMedicine).toHaveBeenCalledWith(9, expect.objectContaining({
+        intervalDays: 6,
+      }));
+    });
+  });
+
+  test('clamps dedicated medicine interval between 1 and 30 days', async () => {
+    render(<PatientMedicinesScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(getMedicines).toHaveBeenCalledWith(9));
+
+    fireEvent.press(screen.getByText('+ Add'));
+
+    expect(screen.getByTestId('patient-medicine-interval-value').props.children).toBe(1);
+    fireEvent.press(screen.getByTestId('patient-medicine-interval-minus-5'));
+    expect(screen.getByTestId('patient-medicine-interval-value').props.children).toBe(1);
+    fireEvent.press(screen.getByTestId('patient-medicine-interval-plus-1'));
+    expect(screen.getByTestId('patient-medicine-interval-value').props.children).toBe(2);
+    fireEvent.press(screen.getByTestId('patient-medicine-interval-minus-1'));
+    expect(screen.getByTestId('patient-medicine-interval-value').props.children).toBe(1);
+
+    for (let i = 0; i < 6; i += 1) {
+      fireEvent.press(screen.getByTestId('patient-medicine-interval-plus-5'));
+    }
+
+    expect(screen.getByTestId('patient-medicine-interval-value').props.children).toBe(30);
   });
 });

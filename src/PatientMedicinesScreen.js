@@ -21,10 +21,10 @@ import {
 } from './database';
 import { useGestureTextInput } from './GestureInputProvider';
 import MedicationFrequencyField from './MedicationFrequencyField';
+import IntervalDaysStepper from './IntervalDaysStepper';
 import { formatMedicineSubtitle } from './medicineDisplay';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
 const EMPTY_FORM = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
 
 function BottomSheet({ visible, onClose, title, children }) {
@@ -305,19 +305,11 @@ export default function PatientMedicinesScreen({ route }) {
           />
 
           <Text style={styles.fieldLabel}>Interval Between Days</Text>
-          <View style={styles.routeRow}>
-            {INTERVAL_DAYS.map((days) => (
-              <TouchableOpacity
-                key={days}
-                style={[styles.routeChip, medForm.intervalDays === days && styles.routeChipActive]}
-                onPress={() => setMedForm(f => ({ ...f, intervalDays: days }))}
-              >
-                <Text style={[styles.routeChipText, medForm.intervalDays === days && styles.routeChipTextActive]}>
-                  {days}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <IntervalDaysStepper
+            value={medForm.intervalDays}
+            onChange={(intervalDays) => setMedForm(f => ({ ...f, intervalDays }))}
+            testIDPrefix="patient-medicine-interval"
+          />
 
           <Text style={styles.fieldLabel}>Duration</Text>
           <TextInput

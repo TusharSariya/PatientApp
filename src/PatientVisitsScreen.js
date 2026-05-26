@@ -22,10 +22,10 @@ import {
 import { buildPrescriptionHtml } from './prescriptionHtml';
 import { sharePrescriptionPdf } from './prescriptionPdf';
 import MedicationFrequencyField from './MedicationFrequencyField';
+import IntervalDaysStepper from './IntervalDaysStepper';
 import { formatMedicineSubtitle, medicineToDraftForm } from './medicineDisplay';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
-const INTERVAL_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
 const EMPTY_MED = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
 
 function formatDateLabel(value) {
@@ -252,19 +252,11 @@ export default function PatientVisitsScreen({ route }) {
         }}
       >
         <Text style={styles.label}>Interval Between Days</Text>
-        <View style={styles.routeRow}>
-          {INTERVAL_DAYS.map((days) => (
-            <TouchableOpacity
-              key={days}
-              style={[styles.routeChip, draftMed.intervalDays === days && styles.routeChipActive]}
-              onPress={() => setDraftMed((m) => ({ ...m, intervalDays: days }))}
-            >
-              <Text style={[styles.routeChipText, draftMed.intervalDays === days && styles.routeChipTextActive]}>
-                {days}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <IntervalDaysStepper
+          value={draftMed.intervalDays}
+          onChange={(intervalDays) => setDraftMed((m) => ({ ...m, intervalDays }))}
+          testIDPrefix="visit-medicine-interval"
+        />
 
         <TouchableOpacity
           testID="current-medicines-toggle"
