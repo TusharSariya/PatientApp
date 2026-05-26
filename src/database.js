@@ -698,6 +698,42 @@ export async function updatePatient(patientId, { firstName, middleName, lastName
   );
 }
 
+export async function updatePatientFamily(patientId, familyId) {
+  const database = await getDb();
+  const targetFamilyId = normalizeFamilyIdInput(familyId);
+  if (targetFamilyId == null) {
+    throw new Error('Choose a family to add this patient to.');
+  }
+
+  const [patientRow, familyRow] = await Promise.all([
+    database.getFirstAsync('SELECT id, family_id FROM patients WHERE id = ?', [patientId]),
+    database.getFirstAsync('SELECT id FROM families WHERE id = ?', [targetFamilyId]),
+  ]);
+
+  if (!patientRow) {
+    throw new Error('Patient does not exist.');
+  }
+  if (!familyRow) {
+    throw new Error(`Family ID ${targetFamilyId} does not exist.`);
+  }
+  if (patientRow.family_id === targetFamilyId) {
+    return { familyId: targetFamilyId, changed: false };
+  }
+
+  if (patientRow.family_id != null) {
+    const summary = await getBalanceSummary(patientId);
+    if (Math.abs(Number(summary.patientBalance ?? 0)) > 0.000001) {
+      throw new Error('Patient balance must be zero before moving to another family.');
+    }
+  }
+
+  await database.runAsync(
+    'UPDATE patients SET family_id = ? WHERE id = ?',
+    [targetFamilyId, patientId]
+  );
+  return { familyId: targetFamilyId, changed: true };
+}
+
 export async function searchPatients({ firstName = '', middleName = '', lastName = '' }) {
   const database = await getDb();
   const filters = [

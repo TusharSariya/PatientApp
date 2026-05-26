@@ -13,7 +13,7 @@ jest.mock('@react-navigation/native', () => {
 import PatientDetailScreen from '../src/PatientDetailScreen';
 import { useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { clearDictationOwner } from '../src/dictationOwner';
-import { updatePatient } from '../src/database';
+import { searchFamiliesByRelativeName, updatePatient, updatePatientFamily } from '../src/database';
 
 jest.mock('../src/database', () => ({
   getGestures: jest.fn().mockResolvedValue([]),
@@ -22,7 +22,9 @@ jest.mock('../src/database', () => ({
     patientBalance: 0,
     familyBalance: 0,
   }),
+  searchFamiliesByRelativeName: jest.fn(),
   updatePatient: jest.fn(),
+  updatePatientFamily: jest.fn(),
 }));
 
 jest.mock('../src/GestureInputProvider', () => ({
@@ -56,6 +58,8 @@ describe('PatientDetailScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     updatePatient.mockResolvedValue(undefined);
+    updatePatientFamily.mockResolvedValue({ familyId: 12, changed: true });
+    searchFamiliesByRelativeName.mockResolvedValue([]);
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-26T12:00:00Z').getTime());
     clearDictationOwner();
     Object.keys(speechHandlers).forEach((key) => {
@@ -287,6 +291,100 @@ describe('PatientDetailScreen', () => {
         notes: 'Updated notes',
       }),
     });
+  });
+
+  test('shows family search only while editing patient details', async () => {
+    const patient = {
+      id: 5,
+      name: 'Alice Johnson',
+      first_name: 'Alice',
+      last_name: 'Johnson',
+      family_id: 2,
+    };
+
+    render(<PatientDetailScreen route={{ params: { patient } }} navigation={{ navigate: jest.fn() }} />);
+
+    openPatientDetails();
+
+    expect(screen.getAllByText('Family #2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('patient-detail-family-search')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('patient-detail-edit-save-button'));
+
+    expect(screen.getByTestId('patient-detail-family-search')).toBeTruthy();
+  });
+
+  test('selects a family and saves the patient family change', async () => {
+    const patient = {
+      id: 5,
+      name: 'Alice Johnson',
+      first_name: 'Alice',
+      last_name: 'Johnson',
+      family_id: 2,
+    };
+    const navigation = { navigate: jest.fn(), setParams: jest.fn() };
+    searchFamiliesByRelativeName.mockResolvedValue([
+      { family_id: 12, relative_name: 'Bob Smith', member_count: 2 },
+    ]);
+    updatePatientFamily.mockResolvedValue({ familyId: 12, changed: true });
+
+    render(<PatientDetailScreen route={{ params: { patient } }} navigation={navigation} />);
+
+    openPatientDetails();
+    fireEvent.press(screen.getByTestId('patient-detail-edit-save-button'));
+    fireEvent.changeText(screen.getByTestId('patient-detail-family-search'), 'Bob');
+
+    await waitFor(() => {
+      expect(searchFamiliesByRelativeName).toHaveBeenCalledWith('Bob');
+    });
+
+    fireEvent.press(screen.getByTestId('patient-detail-family-match-12'));
+    fireEvent.press(screen.getByTestId('patient-detail-edit-save-button'));
+
+    await waitFor(() => {
+      expect(updatePatientFamily).toHaveBeenCalledWith(5, '12');
+    });
+    expect(navigation.setParams).toHaveBeenCalledWith({
+      patient: expect.objectContaining({ family_id: 12 }),
+    });
+    expect(screen.getAllByText('Family #12').length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('blocked family move shows the database error and keeps editing', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const patient = {
+      id: 5,
+      name: 'Alice Johnson',
+      first_name: 'Alice',
+      last_name: 'Johnson',
+      family_id: 2,
+    };
+    searchFamiliesByRelativeName.mockResolvedValue([
+      { family_id: 12, relative_name: 'Bob Smith', member_count: 2 },
+    ]);
+    updatePatientFamily.mockRejectedValue(new Error('Patient balance must be zero before moving to another family.'));
+
+    render(<PatientDetailScreen route={{ params: { patient } }} navigation={{ navigate: jest.fn() }} />);
+
+    openPatientDetails();
+    fireEvent.press(screen.getByTestId('patient-detail-edit-save-button'));
+    fireEvent.changeText(screen.getByTestId('patient-detail-family-search'), 'Bob');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('patient-detail-family-match-12')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('patient-detail-family-match-12'));
+    fireEvent.press(screen.getByTestId('patient-detail-edit-save-button'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Error', 'Patient balance must be zero before moving to another family.');
+    });
+    expect(updatePatient).not.toHaveBeenCalled();
+    expect(screen.getByText('Save')).toBeTruthy();
+    expect(screen.getByTestId('patient-detail-family-search')).toBeTruthy();
+
+    alertSpy.mockRestore();
   });
 
   test('requires first and last name before saving inline details', () => {

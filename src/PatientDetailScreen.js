@@ -20,7 +20,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import { useGestureTextInput } from './GestureInputProvider';
 import { formatMoney } from './currency';
-import { getAppSettings, getBalanceSummary, updatePatient } from './database';
+import {
+  getAppSettings,
+  getBalanceSummary,
+  searchFamiliesByRelativeName,
+  updatePatient,
+  updatePatientFamily,
+} from './database';
 import { formatPatientAge } from './patientAge';
 import { formatPatientNameParts, splitPatientName } from './patientName';
 
@@ -128,6 +134,10 @@ export default function PatientDetailScreen({ route, navigation }) {
   const [recognizing, setRecognizing] = useState(false);
   const [balances, setBalances] = useState({ patientBalance: 0, familyBalance: 0 });
   const [currencyCode, setCurrencyCode] = useState('INR');
+  const [familyQuery, setFamilyQuery] = useState('');
+  const [familyMatches, setFamilyMatches] = useState([]);
+  const [selectedFamily, setSelectedFamily] = useState(null);
+  const [searchingFamilies, setSearchingFamilies] = useState(false);
 
   const notesRef = useRef(null);
   const setNotes = (value) => setForm((current) => ({ ...current, notes: value }));
@@ -172,7 +182,39 @@ export default function PatientDetailScreen({ route, navigation }) {
     setDetailsExpanded(false);
     setEditing(false);
     setRecognizing(false);
+    setFamilyQuery('');
+    setFamilyMatches([]);
+    setSelectedFamily(null);
   }, [patient]);
+
+  React.useEffect(() => {
+    if (!editing) return undefined;
+
+    let isActive = true;
+    const query = familyQuery.trim();
+    if (!query) {
+      setFamilyMatches([]);
+      setSearchingFamilies(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    setSearchingFamilies(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        const matches = await searchFamiliesByRelativeName(query);
+        if (isActive) setFamilyMatches(matches);
+      } finally {
+        if (isActive) setSearchingFamilies(false);
+      }
+    }, 200);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+    };
+  }, [editing, familyQuery]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -278,6 +320,9 @@ export default function PatientDetailScreen({ route, navigation }) {
 
   async function handleDetailsAction() {
     if (!editing) {
+      setFamilyQuery('');
+      setFamilyMatches([]);
+      setSelectedFamily(null);
       setEditing(true);
       return;
     }
@@ -296,17 +341,37 @@ export default function PatientDetailScreen({ route, navigation }) {
       Alert.alert('Missing Fields', 'Please fill in first name and last name.');
       return;
     }
+    if (familyQuery.trim() && !selectedFamily) {
+      Alert.alert('Select Family', 'Choose a matching family from the list, or clear the family search.');
+      return;
+    }
 
     setSavingDetails(true);
     try {
+      let nextFamilyId = savedPatient.family_id;
+      if (selectedFamily && selectedFamily.family_id !== savedPatient.family_id) {
+        const familyResult = await updatePatientFamily(savedPatient.id, String(selectedFamily.family_id));
+        nextFamilyId = familyResult.familyId;
+      }
       await updatePatient(savedPatient.id, nextForm);
-      const nextPatient = patientFromForm(savedPatient, nextForm);
+      const nextPatient = {
+        ...patientFromForm(savedPatient, nextForm),
+        family_id: nextFamilyId,
+      };
       setSavedPatient(nextPatient);
       setForm(nextForm);
+      setFamilyQuery('');
+      setFamilyMatches([]);
+      setSelectedFamily(null);
       setEditing(false);
       navigation.setParams?.({ patient: nextPatient });
-    } catch {
-      Alert.alert('Error', 'Failed to update patient details.');
+      const summary = await getBalanceSummary(savedPatient.id);
+      setBalances({
+        patientBalance: summary.patientBalance ?? 0,
+        familyBalance: summary.familyBalance ?? 0,
+      });
+    } catch (e) {
+      Alert.alert('Error', e?.message ?? 'Failed to update patient details.');
     } finally {
       setSavingDetails(false);
     }
@@ -399,6 +464,60 @@ export default function PatientDetailScreen({ route, navigation }) {
               showSoftInputOnFocus={notesInput.showSoftInputOnFocus}
               multiline
             />
+            <View style={styles.familySection}>
+              <Text style={styles.fieldLabel}>Family</Text>
+              <Text style={styles.familyCurrentText}>
+                {savedPatient.family_id ? `Family #${savedPatient.family_id}` : 'No family assigned'}
+              </Text>
+              {editing ? (
+                <>
+                  <TextInput
+                    testID="patient-detail-family-search"
+                    style={styles.fieldInput}
+                    value={familyQuery}
+                    onChangeText={(value) => {
+                      setFamilyQuery(value);
+                      setSelectedFamily(null);
+                    }}
+                    placeholder="Search relative name"
+                    placeholderTextColor="#bbb"
+                    autoCapitalize="words"
+                  />
+                  <Text style={styles.familyHint}>
+                    Moving from another family requires zero patient balance.
+                  </Text>
+                  {searchingFamilies ? <Text style={styles.familyStatus}>Searching families...</Text> : null}
+                  {!searchingFamilies && familyQuery.trim() && familyMatches.length === 0 ? (
+                    <Text style={styles.familyStatus}>No family matches found.</Text>
+                  ) : null}
+                  {familyMatches.map((match) => {
+                    const isSelected = selectedFamily?.family_id === match.family_id;
+                    return (
+                      <TouchableOpacity
+                        key={match.family_id}
+                        style={[styles.familyMatchButton, isSelected && styles.familyMatchButtonSelected]}
+                        onPress={() => {
+                          setSelectedFamily(match);
+                          setFamilyQuery(match.relative_name);
+                        }}
+                        activeOpacity={0.8}
+                        testID={`patient-detail-family-match-${match.family_id}`}
+                      >
+                        <Text style={[styles.familyMatchTitle, isSelected && styles.familyMatchTitleSelected]}>
+                          Family #{match.family_id}
+                        </Text>
+                        <Text style={[styles.familyMatchSubtitle, isSelected && styles.familyMatchSubtitleSelected]}>
+                          Relative match: {match.relative_name} ({match.member_count} member{match.member_count === 1 ? '' : 's'})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {selectedFamily ? (
+                    <Text style={styles.familyStatus}>Selected Family #{selectedFamily.family_id}</Text>
+                  ) : null}
+                </>
+              ) : null}
+            </View>
             <TouchableOpacity
               style={[styles.detailsActionButton, savingDetails && styles.detailsActionButtonDisabled]}
               onPress={handleDetailsAction}
@@ -560,6 +679,60 @@ const styles = StyleSheet.create({
   fieldInputMultiline: {
     height: 88,
     textAlignVertical: 'top',
+  },
+  familySection: {
+    marginBottom: 20,
+  },
+  familyCurrentText: {
+    backgroundColor: '#f7f8fc',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    color: '#5f6d8a',
+    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  familyHint: {
+    color: '#5f6d8a',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  familyStatus: {
+    color: '#5f6d8a',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  familyMatchButton: {
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+    backgroundColor: '#f7f9ff',
+  },
+  familyMatchButtonSelected: {
+    backgroundColor: '#4f6ef7',
+    borderColor: '#4f6ef7',
+  },
+  familyMatchTitle: {
+    color: '#1a1a2e',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  familyMatchTitleSelected: {
+    color: '#fff',
+  },
+  familyMatchSubtitle: {
+    color: '#5f6d8a',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  familyMatchSubtitleSelected: {
+    color: '#edf1ff',
   },
   detailsActionButton: {
     marginTop: 4,

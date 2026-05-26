@@ -151,6 +151,108 @@ describe('database', () => {
     );
   });
 
+  test('updatePatientFamily moves patient with zero balance to an existing family', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('SELECT id, family_id FROM patients WHERE id = ?')) {
+        return { id: params[0], family_id: 4 };
+      }
+      if (sql.includes('SELECT id FROM families WHERE id = ?')) {
+        return { id: params[0] };
+      }
+      if (sql.includes('SUM(visit_cost)') || sql.includes('SUM(amount)')) {
+        return { total: 0 };
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const result = await database.updatePatientFamily(7, '12');
+
+    expect(result).toEqual({ familyId: 12, changed: true });
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE patients SET family_id = ? WHERE id = ?',
+      [12, 7]
+    );
+    expect(db.runAsync).not.toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE payments'),
+      expect.anything()
+    );
+  });
+
+  test('updatePatientFamily blocks moving families with nonzero patient balance', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('SELECT id, family_id FROM patients WHERE id = ?')) {
+        return { id: params[0], family_id: 4 };
+      }
+      if (sql.includes('SELECT id FROM families WHERE id = ?')) {
+        return { id: params[0] };
+      }
+      if (sql.includes('FROM visits WHERE patient_id = ?')) {
+        return { total: 100 };
+      }
+      if (sql.includes("scope = 'patient'")) {
+        return { total: 25 };
+      }
+      if (sql.includes('SUM(v.visit_cost)') || sql.includes('WHERE family_id = ?')) {
+        return { total: 0 };
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    await expect(database.updatePatientFamily(7, '12')).rejects.toThrow(
+      'Patient balance must be zero before moving to another family.'
+    );
+    expect(db.runAsync).not.toHaveBeenCalledWith(
+      'UPDATE patients SET family_id = ? WHERE id = ?',
+      expect.anything()
+    );
+  });
+
+  test('updatePatientFamily allows patient without a family to join any existing family', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('SELECT id, family_id FROM patients WHERE id = ?')) {
+        return { id: params[0], family_id: null };
+      }
+      if (sql.includes('SELECT id FROM families WHERE id = ?')) {
+        return { id: params[0] };
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const result = await database.updatePatientFamily(7, '12');
+
+    expect(result).toEqual({ familyId: 12, changed: true });
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE patients SET family_id = ? WHERE id = ?',
+      [12, 7]
+    );
+  });
+
+  test('updatePatientFamily rejects nonexistent target family', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('SELECT id, family_id FROM patients WHERE id = ?')) {
+        return { id: params[0], family_id: null };
+      }
+      if (sql.includes('SELECT id FROM families WHERE id = ?')) {
+        return null;
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    await expect(database.updatePatientFamily(7, '12')).rejects.toThrow('Family ID 12 does not exist.');
+    expect(db.runAsync).not.toHaveBeenCalledWith(
+      'UPDATE patients SET family_id = ? WHERE id = ?',
+      expect.anything()
+    );
+  });
+
   test('adds patient notes column for existing databases', async () => {
     const db = createMockDb();
     db.getAllAsync.mockImplementation(async (sql) => {
