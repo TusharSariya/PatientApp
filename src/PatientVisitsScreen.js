@@ -65,6 +65,8 @@ export default function PatientVisitsScreen({ route }) {
   const [draftMed, setDraftMed] = useState(EMPTY_MED);
   const [prescribedMeds, setPrescribedMeds] = useState([]);
   const [editingDraftId, setEditingDraftId] = useState(null);
+  const scrollViewRef = useRef(null);
+  const medicineSectionYRef = useRef(0);
   const nextDraftIdRef = useRef(0);
   const [visitCost, setVisitCost] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -177,6 +179,13 @@ export default function PatientVisitsScreen({ route }) {
     };
   }
 
+  function scrollToMedicineSection() {
+    scrollViewRef.current?.scrollTo?.({
+      y: medicineSectionYRef.current,
+      animated: true,
+    });
+  }
+
   function addDraftMedicine() {
     if (!draftMed.name.trim()) {
       Alert.alert('Required', 'Medicine name is required.');
@@ -194,6 +203,7 @@ export default function PatientVisitsScreen({ route }) {
       setPrescribedMeds((current) => [...current, buildDraftMedicineEntry(nextDraftIdRef.current)]);
     }
     setDraftMed(EMPTY_MED);
+    scrollToMedicineSection();
   }
 
   function startEditDraftMedicine(draftId) {
@@ -233,9 +243,167 @@ export default function PatientVisitsScreen({ route }) {
     ]);
   }
 
+  function renderMedicineSection() {
+    return (
+      <View
+        testID="visit-medicine-section"
+        onLayout={(event) => {
+          medicineSectionYRef.current = event.nativeEvent.layout.y;
+        }}
+      >
+        <Text style={styles.label}>Interval Between Days</Text>
+        <View style={styles.routeRow}>
+          {INTERVAL_DAYS.map((days) => (
+            <TouchableOpacity
+              key={days}
+              style={[styles.routeChip, draftMed.intervalDays === days && styles.routeChipActive]}
+              onPress={() => setDraftMed((m) => ({ ...m, intervalDays: days }))}
+            >
+              <Text style={[styles.routeChipText, draftMed.intervalDays === days && styles.routeChipTextActive]}>
+                {days}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          testID="current-medicines-toggle"
+          style={styles.currentMedsToggle}
+          onPress={() => setCurrentMedsExpanded((open) => !open)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.currentMedsToggleTitle}>
+            Current medicines ({currentMedicines.length})
+          </Text>
+          <Text style={styles.currentMedsToggleChevron}>{currentMedsExpanded ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+        {currentMedsExpanded ? (
+          <>
+            <Text style={styles.currentMedsHint}>Tap a medicine to pre-fill the form below.</Text>
+            {currentMedicines.length === 0 ? (
+              <Text style={styles.currentMedsEmpty}>No medicines on file.</Text>
+            ) : (
+              currentMedicines.map((med) => {
+                const subtitle = formatMedicineSubtitle(med);
+                return (
+                  <TouchableOpacity
+                    key={med.id}
+                    style={styles.currentMedRow}
+                    onPress={() => setDraftMed(medicineToDraftForm(med))}
+                    activeOpacity={0.75}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.currentMedName}>{med.name}</Text>
+                      {subtitle ? <Text style={styles.currentMedSub}>{subtitle}</Text> : null}
+                    </View>
+                    <Text style={styles.currentMedChevron}>›</Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </>
+        ) : null}
+
+        <Text style={[styles.sectionTitleInline, { marginTop: 20 }]}>Prescribe Medicines</Text>
+        <TextInput
+          style={styles.input}
+          value={draftMed.name}
+          onChangeText={(value) => setDraftMed((m) => ({ ...m, name: value }))}
+          placeholder="Medicine name"
+          placeholderTextColor="#bbb"
+        />
+        <TextInput
+          style={styles.input}
+          value={draftMed.dosage}
+          onChangeText={(value) => setDraftMed((m) => ({ ...m, dosage: value }))}
+          placeholder="Dosage"
+          placeholderTextColor="#bbb"
+        />
+        <MedicationFrequencyField
+          value={draftMed.frequency}
+          onChange={(frequency) => setDraftMed((m) => ({ ...m, frequency }))}
+        />
+        <TextInput
+          style={styles.input}
+          value={draftMed.duration}
+          onChangeText={(value) => setDraftMed((m) => ({ ...m, duration: value }))}
+          placeholder="Duration"
+          placeholderTextColor="#bbb"
+        />
+        <View style={styles.routeRow}>
+          {ROUTES.map((routeName) => (
+            <TouchableOpacity
+              key={routeName}
+              style={[styles.routeChip, draftMed.route === routeName && styles.routeChipActive]}
+              onPress={() => setDraftMed((m) => ({ ...m, route: routeName }))}
+            >
+              <Text style={[styles.routeChipText, draftMed.route === routeName && styles.routeChipTextActive]}>{routeName}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={draftMed.instructions}
+          onChangeText={(value) => setDraftMed((m) => ({ ...m, instructions: value }))}
+          placeholder="Instructions"
+          placeholderTextColor="#bbb"
+          multiline
+        />
+        <TouchableOpacity style={styles.secondaryButton} onPress={addDraftMedicine}>
+          <Text style={styles.secondaryButtonText}>
+            {editingDraftId != null ? 'Update Prescribed Medicine' : '+ Add Prescribed Medicine'}
+          </Text>
+        </TouchableOpacity>
+        {editingDraftId != null ? (
+          <TouchableOpacity style={styles.cancelEditButton} onPress={cancelEditDraftMedicine}>
+            <Text style={styles.cancelEditButtonText}>Cancel edit</Text>
+          </TouchableOpacity>
+        ) : null}
+        {prescribedMeds.map((med) => {
+          const subtitle = formatMedicineSubtitle(med);
+          return (
+            <View key={med.draftId} style={styles.prescribedRow}>
+              <View style={styles.prescribedInfo}>
+                <Text style={styles.prescribedName}>{med.name}</Text>
+                {subtitle ? <Text style={styles.prescribedText}>{subtitle}</Text> : null}
+                {med.duration ? <Text style={styles.prescribedText}>{med.duration}</Text> : null}
+                {med.instructions ? (
+                  <Text style={styles.prescribedText} numberOfLines={2}>
+                    {med.instructions}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.prescribedActions}>
+                <TouchableOpacity
+                  style={styles.prescribedActionBtn}
+                  onPress={() => startEditDraftMedicine(med.draftId)}
+                  testID={`edit-draft-med-${med.draftId}`}
+                >
+                  <Text style={styles.prescribedEditText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.prescribedActionBtn}
+                  onPress={() => deleteDraftMedicine(med.draftId)}
+                  testID={`delete-draft-med-${med.draftId}`}
+                >
+                  <Text style={styles.prescribedDeleteText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollViewRef}
+        testID="visit-scroll-view"
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.patientCard}>
           <Text style={styles.patientName}>{patient.name}</Text>
           <Text style={styles.patientDetail}>Visits and encounter history</Text>
@@ -259,6 +427,7 @@ export default function PatientVisitsScreen({ route }) {
             placeholder="YYYY-MM-DD"
             placeholderTextColor="#bbb"
           />
+          {renderMedicineSection()}
           <Text style={styles.label}>Complaints</Text>
           <TextInput
             style={[styles.input, styles.multiline]}
@@ -378,147 +547,6 @@ export default function PatientVisitsScreen({ route }) {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.label}>Interval Between Days</Text>
-          <View style={styles.routeRow}>
-            {INTERVAL_DAYS.map((days) => (
-              <TouchableOpacity
-                key={days}
-                style={[styles.routeChip, draftMed.intervalDays === days && styles.routeChipActive]}
-                onPress={() => setDraftMed((m) => ({ ...m, intervalDays: days }))}
-              >
-                <Text style={[styles.routeChipText, draftMed.intervalDays === days && styles.routeChipTextActive]}>
-                  {days}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <TouchableOpacity
-            testID="current-medicines-toggle"
-            style={styles.currentMedsToggle}
-            onPress={() => setCurrentMedsExpanded((open) => !open)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.currentMedsToggleTitle}>
-              Current medicines ({currentMedicines.length})
-            </Text>
-            <Text style={styles.currentMedsToggleChevron}>{currentMedsExpanded ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-          {currentMedsExpanded ? (
-            <>
-              <Text style={styles.currentMedsHint}>Tap a medicine to pre-fill the form below.</Text>
-              {currentMedicines.length === 0 ? (
-                <Text style={styles.currentMedsEmpty}>No medicines on file.</Text>
-              ) : (
-                currentMedicines.map((med) => {
-                  const subtitle = formatMedicineSubtitle(med);
-                  return (
-                    <TouchableOpacity
-                      key={med.id}
-                      style={styles.currentMedRow}
-                      onPress={() => setDraftMed(medicineToDraftForm(med))}
-                      activeOpacity={0.75}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.currentMedName}>{med.name}</Text>
-                        {subtitle ? <Text style={styles.currentMedSub}>{subtitle}</Text> : null}
-                      </View>
-                      <Text style={styles.currentMedChevron}>›</Text>
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-            </>
-          ) : null}
-
-          <Text style={[styles.sectionTitleInline, { marginTop: 20 }]}>Prescribe Medicines</Text>
-          <TextInput
-            style={styles.input}
-            value={draftMed.name}
-            onChangeText={(value) => setDraftMed((m) => ({ ...m, name: value }))}
-            placeholder="Medicine name"
-            placeholderTextColor="#bbb"
-          />
-          <TextInput
-            style={styles.input}
-            value={draftMed.dosage}
-            onChangeText={(value) => setDraftMed((m) => ({ ...m, dosage: value }))}
-            placeholder="Dosage"
-            placeholderTextColor="#bbb"
-          />
-          <MedicationFrequencyField
-            value={draftMed.frequency}
-            onChange={(frequency) => setDraftMed((m) => ({ ...m, frequency }))}
-          />
-          <TextInput
-            style={styles.input}
-            value={draftMed.duration}
-            onChangeText={(value) => setDraftMed((m) => ({ ...m, duration: value }))}
-            placeholder="Duration"
-            placeholderTextColor="#bbb"
-          />
-          <View style={styles.routeRow}>
-            {ROUTES.map((routeName) => (
-              <TouchableOpacity
-                key={routeName}
-                style={[styles.routeChip, draftMed.route === routeName && styles.routeChipActive]}
-                onPress={() => setDraftMed((m) => ({ ...m, route: routeName }))}
-              >
-                <Text style={[styles.routeChipText, draftMed.route === routeName && styles.routeChipTextActive]}>{routeName}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={draftMed.instructions}
-            onChangeText={(value) => setDraftMed((m) => ({ ...m, instructions: value }))}
-            placeholder="Instructions"
-            placeholderTextColor="#bbb"
-            multiline
-          />
-          <TouchableOpacity style={styles.secondaryButton} onPress={addDraftMedicine}>
-            <Text style={styles.secondaryButtonText}>
-              {editingDraftId != null ? 'Update Prescribed Medicine' : '+ Add Prescribed Medicine'}
-            </Text>
-          </TouchableOpacity>
-          {editingDraftId != null ? (
-            <TouchableOpacity style={styles.cancelEditButton} onPress={cancelEditDraftMedicine}>
-              <Text style={styles.cancelEditButtonText}>Cancel edit</Text>
-            </TouchableOpacity>
-          ) : null}
-          {prescribedMeds.map((med) => {
-            const subtitle = formatMedicineSubtitle(med);
-            return (
-              <View key={med.draftId} style={styles.prescribedRow}>
-                <View style={styles.prescribedInfo}>
-                  <Text style={styles.prescribedName}>{med.name}</Text>
-                  {subtitle ? <Text style={styles.prescribedText}>{subtitle}</Text> : null}
-                  {med.duration ? <Text style={styles.prescribedText}>{med.duration}</Text> : null}
-                  {med.instructions ? (
-                    <Text style={styles.prescribedText} numberOfLines={2}>
-                      {med.instructions}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={styles.prescribedActions}>
-                  <TouchableOpacity
-                    style={styles.prescribedActionBtn}
-                    onPress={() => startEditDraftMedicine(med.draftId)}
-                    testID={`edit-draft-med-${med.draftId}`}
-                  >
-                    <Text style={styles.prescribedEditText}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.prescribedActionBtn}
-                    onPress={() => deleteDraftMedicine(med.draftId)}
-                    testID={`delete-draft-med-${med.draftId}`}
-                  >
-                    <Text style={styles.prescribedDeleteText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleCreateVisit}

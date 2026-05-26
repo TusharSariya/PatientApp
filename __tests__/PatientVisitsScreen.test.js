@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import PatientVisitsScreen from '../src/PatientVisitsScreen';
@@ -24,6 +24,19 @@ jest.mock('../src/database', () => ({
 jest.mock('../src/prescriptionPdf', () => ({
   sharePrescriptionPdf: jest.fn(),
 }));
+
+function collectRenderedText(node, texts = []) {
+  if (typeof node === 'string') {
+    texts.push(node);
+    return texts;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((child) => collectRenderedText(child, texts));
+    return texts;
+  }
+  node?.children?.forEach((child) => collectRenderedText(child, texts));
+  return texts;
+}
 
 describe('PatientVisitsScreen', () => {
   const patient = {
@@ -75,6 +88,22 @@ describe('PatientVisitsScreen', () => {
 
     fireEvent.press(screen.getByTestId('current-medicines-toggle'));
     expect(screen.queryByText('Ibuprofen')).toBeNull();
+  });
+
+  test('places medicine section before visit details in the new visit form', async () => {
+    const { toJSON } = render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    const renderedText = collectRenderedText(toJSON());
+    const medicineIndex = renderedText.indexOf('Prescribe Medicines');
+    const complaintsIndex = renderedText.indexOf('Complaints');
+
+    expect(medicineIndex).toBeGreaterThan(-1);
+    expect(complaintsIndex).toBeGreaterThan(-1);
+    expect(medicineIndex).toBeLessThan(complaintsIndex);
   });
 
   test('shows empty state when patient has no current medicines', async () => {
@@ -135,5 +164,26 @@ describe('PatientVisitsScreen', () => {
     fireEvent.press(screen.getByTestId('delete-draft-med-1'));
 
     expect(screen.queryByText('Aspirin EC')).toBeNull();
+  });
+
+  test('scrolls to the medicine section after adding a prescribed medicine', async () => {
+    const scrollSpy = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    fireEvent(screen.getByTestId('visit-medicine-section'), 'layout', {
+      nativeEvent: { layout: { y: 88 } },
+    });
+    fireEvent.changeText(screen.getByPlaceholderText('Medicine name'), 'Aspirin');
+    fireEvent.press(screen.getByText('+ Add Prescribed Medicine'));
+
+    expect(screen.getByText('Aspirin')).toBeTruthy();
+    expect(scrollSpy).toHaveBeenCalledWith({ y: 88, animated: true });
+
+    scrollSpy.mockRestore();
   });
 });
