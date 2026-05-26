@@ -244,6 +244,25 @@ async function ensureVisitsSchema(database) {
       scope TEXT NOT NULL DEFAULT 'patient',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS draft_visits (
+      patient_id INTEGER PRIMARY KEY,
+      visit_date TEXT NOT NULL DEFAULT '',
+      complaints TEXT NOT NULL DEFAULT '',
+      diagnosis TEXT NOT NULL DEFAULT '',
+      investigations TEXT NOT NULL DEFAULT '',
+      procedures TEXT NOT NULL DEFAULT '',
+      findings TEXT NOT NULL DEFAULT '',
+      bp TEXT NOT NULL DEFAULT '',
+      weight TEXT NOT NULL DEFAULT '',
+      weight_unit TEXT NOT NULL DEFAULT 'kg',
+      notes TEXT NOT NULL DEFAULT '',
+      visit_cost TEXT NOT NULL DEFAULT '',
+      payment_amount TEXT NOT NULL DEFAULT '',
+      payment_scope TEXT NOT NULL DEFAULT 'patient',
+      draft_med_json TEXT NOT NULL DEFAULT '{}',
+      medicines_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -863,6 +882,109 @@ export async function getVisitMedicines(visitId) {
     'SELECT * FROM visit_medicines WHERE visit_id = ? ORDER BY id ASC',
     [visitId]
   );
+}
+
+function parseDraftJson(value, fallback) {
+  try {
+    const parsed = JSON.parse(value ?? '');
+    return parsed == null ? fallback : parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getDraftVisit(patientId) {
+  const database = await getDb();
+  const row = await database.getFirstAsync(
+    'SELECT * FROM draft_visits WHERE patient_id = ?',
+    [patientId]
+  );
+  if (!row) return null;
+  return {
+    visitDate: row.visit_date ?? '',
+    complaints: row.complaints ?? '',
+    diagnosis: row.diagnosis ?? '',
+    investigations: row.investigations ?? '',
+    procedures: row.procedures ?? '',
+    findings: row.findings ?? '',
+    bp: row.bp ?? '',
+    weight: row.weight ?? '',
+    weightUnit: row.weight_unit ?? 'kg',
+    notes: row.notes ?? '',
+    visitCost: row.visit_cost ?? '',
+    paymentAmount: row.payment_amount ?? '',
+    paymentScope: row.payment_scope === 'family' ? 'family' : 'patient',
+    draftMed: parseDraftJson(row.draft_med_json, {}),
+    medicines: parseDraftJson(row.medicines_json, []),
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function saveDraftVisit(patientId, draft) {
+  const database = await getDb();
+  await database.runAsync(
+    `
+      INSERT INTO draft_visits (
+        patient_id,
+        visit_date,
+        complaints,
+        diagnosis,
+        investigations,
+        procedures,
+        findings,
+        bp,
+        weight,
+        weight_unit,
+        notes,
+        visit_cost,
+        payment_amount,
+        payment_scope,
+        draft_med_json,
+        medicines_json,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(patient_id) DO UPDATE SET
+        visit_date = excluded.visit_date,
+        complaints = excluded.complaints,
+        diagnosis = excluded.diagnosis,
+        investigations = excluded.investigations,
+        procedures = excluded.procedures,
+        findings = excluded.findings,
+        bp = excluded.bp,
+        weight = excluded.weight,
+        weight_unit = excluded.weight_unit,
+        notes = excluded.notes,
+        visit_cost = excluded.visit_cost,
+        payment_amount = excluded.payment_amount,
+        payment_scope = excluded.payment_scope,
+        draft_med_json = excluded.draft_med_json,
+        medicines_json = excluded.medicines_json,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [
+      patientId,
+      draft.visitDate ?? '',
+      draft.complaints ?? '',
+      draft.diagnosis ?? '',
+      draft.investigations ?? '',
+      draft.procedures ?? '',
+      draft.findings ?? '',
+      draft.bp ?? '',
+      draft.weight ?? '',
+      draft.weightUnit ?? 'kg',
+      draft.notes ?? '',
+      draft.visitCost ?? '',
+      draft.paymentAmount ?? '',
+      draft.paymentScope === 'family' ? 'family' : 'patient',
+      JSON.stringify(draft.draftMed ?? {}),
+      JSON.stringify(draft.medicines ?? []),
+    ]
+  );
+}
+
+export async function clearDraftVisit(patientId) {
+  const database = await getDb();
+  await database.runAsync('DELETE FROM draft_visits WHERE patient_id = ?', [patientId]);
 }
 
 function normalizeAmount(value) {

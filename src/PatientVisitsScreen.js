@@ -12,12 +12,15 @@ import {
 import { formatMoney } from './currency';
 import {
   addVisit,
+  clearDraftVisit,
   getAppSettings,
   getBalanceSummary,
   getClinicProfile,
+  getDraftVisit,
   getMedicines,
   getVisitMedicines,
   getVisits,
+  saveDraftVisit,
 } from './database';
 import { buildPrescriptionHtml } from './prescriptionHtml';
 import { sharePrescriptionPdf } from './prescriptionPdf';
@@ -37,6 +40,31 @@ function formatDateLabel(value) {
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeDraftMed(value) {
+  return {
+    name: value?.name ?? '',
+    dosage: value?.dosage ?? '',
+    frequency: value?.frequency ?? '',
+    intervalDays: value?.intervalDays ?? value?.interval_days ?? 1,
+    duration: value?.duration ?? '',
+    route: value?.route ?? 'Oral',
+    instructions: value?.instructions ?? '',
+  };
+}
+
+function hasMedicineDraftContent(med) {
+  const normalized = normalizeDraftMed(med);
+  return Boolean(
+    normalized.name.trim() ||
+    normalized.dosage.trim() ||
+    normalized.frequency.trim() ||
+    normalized.duration.trim() ||
+    normalized.instructions.trim() ||
+    normalized.route !== 'Oral' ||
+    normalized.intervalDays !== 1
+  );
 }
 
 export default function PatientVisitsScreen({ route }) {
@@ -72,6 +100,10 @@ export default function PatientVisitsScreen({ route }) {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentScope, setPaymentScope] = useState('patient');
   const [currencyCode, setCurrencyCode] = useState('INR');
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftStatus, setDraftStatus] = useState('');
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const skipAutosaveRef = useRef(false);
 
   const loadVisits = useCallback(async () => {
     setLoading(true);
@@ -94,6 +126,171 @@ export default function PatientVisitsScreen({ route }) {
   useEffect(() => {
     loadVisits().catch(() => {});
   }, [loadVisits]);
+
+  function resetVisitForm() {
+    setVisitDate(todayIsoDate());
+    setComplaints('');
+    setDiagnosis('');
+    setInvestigations('');
+    setProcedures('');
+    setFindings('');
+    setBp('');
+    setWeight('');
+    setWeightUnit('kg');
+    setNotes('');
+    setPrescribedMeds([]);
+    setEditingDraftId(null);
+    setDraftMed(EMPTY_MED);
+    nextDraftIdRef.current = 0;
+    setVisitCost('');
+    setPaymentAmount('');
+    setPaymentScope('patient');
+  }
+
+  function buildDraftPayload() {
+    return {
+      visitDate,
+      complaints,
+      diagnosis,
+      investigations,
+      procedures,
+      findings,
+      bp,
+      weight,
+      weightUnit,
+      notes,
+      visitCost,
+      paymentAmount,
+      paymentScope,
+      draftMed,
+      medicines: prescribedMeds,
+    };
+  }
+
+  function hasDraftContent(draft) {
+    return Boolean(
+      (draft.visitDate ?? '').trim() !== todayIsoDate() ||
+      (draft.complaints ?? '').trim() ||
+      (draft.diagnosis ?? '').trim() ||
+      (draft.investigations ?? '').trim() ||
+      (draft.procedures ?? '').trim() ||
+      (draft.findings ?? '').trim() ||
+      (draft.bp ?? '').trim() ||
+      (draft.weight ?? '').trim() ||
+      draft.weightUnit !== 'kg' ||
+      (draft.notes ?? '').trim() ||
+      (draft.visitCost ?? '').trim() ||
+      (draft.paymentAmount ?? '').trim() ||
+      draft.paymentScope !== 'patient' ||
+      hasMedicineDraftContent(draft.draftMed) ||
+      (draft.medicines ?? []).length > 0
+    );
+  }
+
+  function restoreDraft(draft) {
+    setVisitDate(draft.visitDate || todayIsoDate());
+    setComplaints(draft.complaints ?? '');
+    setDiagnosis(draft.diagnosis ?? '');
+    setInvestigations(draft.investigations ?? '');
+    setProcedures(draft.procedures ?? '');
+    setFindings(draft.findings ?? '');
+    setBp(draft.bp ?? '');
+    setWeight(draft.weight ?? '');
+    setWeightUnit(draft.weightUnit ?? 'kg');
+    setNotes(draft.notes ?? '');
+    setVisitCost(draft.visitCost ?? '');
+    setPaymentAmount(draft.paymentAmount ?? '');
+    setPaymentScope(draft.paymentScope === 'family' ? 'family' : 'patient');
+    const medicines = Array.isArray(draft.medicines) ? draft.medicines : [];
+    const restoredMeds = medicines.map((med, index) => ({
+      ...normalizeDraftMed(med),
+      draftId: med.draftId ?? index + 1,
+    }));
+    setPrescribedMeds(restoredMeds);
+    nextDraftIdRef.current = restoredMeds.reduce((max, med) => Math.max(max, med.draftId), 0);
+    setDraftMed(normalizeDraftMed(draft.draftMed));
+    setEditingDraftId(null);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setDraftReady(false);
+    setDraftStatus('');
+    skipAutosaveRef.current = true;
+    getDraftVisit(patient.id)
+      .then((draft) => {
+        if (cancelled) return;
+        if (draft) {
+          restoreDraft(draft);
+          setHasSavedDraft(true);
+          setDraftStatus('Draft restored');
+        } else {
+          resetVisitForm();
+          setHasSavedDraft(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHasSavedDraft(false);
+        }
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setDraftReady(true);
+        setTimeout(() => {
+          skipAutosaveRef.current = false;
+        }, 0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.id]);
+
+  useEffect(() => {
+    if (!draftReady) return undefined;
+    if (skipAutosaveRef.current) return undefined;
+
+    const draft = buildDraftPayload();
+    const shouldKeepDraft = hasDraftContent(draft);
+
+    const timer = setTimeout(async () => {
+      try {
+        if (shouldKeepDraft) {
+          setDraftStatus('Saving draft...');
+          await saveDraftVisit(patient.id, draft);
+          setHasSavedDraft(true);
+          setDraftStatus('Draft saved');
+        } else if (hasSavedDraft) {
+          await clearDraftVisit(patient.id);
+          setHasSavedDraft(false);
+          setDraftStatus('');
+        }
+      } catch {
+        setDraftStatus('Draft not saved');
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [
+    patient.id,
+    draftReady,
+    visitDate,
+    complaints,
+    diagnosis,
+    investigations,
+    procedures,
+    findings,
+    bp,
+    weight,
+    weightUnit,
+    notes,
+    draftMed,
+    prescribedMeds,
+    visitCost,
+    paymentAmount,
+    paymentScope,
+    hasSavedDraft,
+  ]);
 
   async function handleCreateVisit() {
     if (!visitDate.trim()) {
@@ -119,26 +316,34 @@ export default function PatientVisitsScreen({ route }) {
         familyId: patient.family_id,
         medicines: prescribedMeds.map(({ draftId: _draftId, ...med }) => med),
       });
-      setComplaints('');
-      setDiagnosis('');
-      setInvestigations('');
-      setProcedures('');
-      setFindings('');
-      setBp('');
-      setWeight('');
-      setWeightUnit('kg');
-      setNotes('');
-      setPrescribedMeds([]);
-      setEditingDraftId(null);
-      setDraftMed(EMPTY_MED);
-      setVisitCost('');
-      setPaymentAmount('');
-      setPaymentScope('patient');
+      await clearDraftVisit(patient.id);
+      skipAutosaveRef.current = true;
+      resetVisitForm();
+      setHasSavedDraft(false);
+      setDraftStatus('');
+      setTimeout(() => {
+        skipAutosaveRef.current = false;
+      }, 0);
       await loadVisits();
     } catch {
       Alert.alert('Error', 'Failed to create visit.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDiscardDraft() {
+    try {
+      await clearDraftVisit(patient.id);
+      skipAutosaveRef.current = true;
+      resetVisitForm();
+      setHasSavedDraft(false);
+      setDraftStatus('');
+      setTimeout(() => {
+        skipAutosaveRef.current = false;
+      }, 0);
+    } catch {
+      Alert.alert('Draft', 'Could not discard the draft.');
     }
   }
 
@@ -410,7 +615,21 @@ export default function PatientVisitsScreen({ route }) {
         </View>
 
         <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>New Visit</Text>
+          <View style={styles.formHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>New Visit</Text>
+              {draftStatus ? <Text style={styles.draftStatus}>{draftStatus}</Text> : null}
+            </View>
+            {hasSavedDraft || hasDraftContent(buildDraftPayload()) ? (
+              <TouchableOpacity
+                style={styles.discardDraftButton}
+                onPress={handleDiscardDraft}
+                testID="discard-draft-visit-button"
+              >
+                <Text style={styles.discardDraftButtonText}>Discard Draft</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <Text style={styles.label}>Visit Date</Text>
           <TextInput
             style={styles.input}
@@ -638,6 +857,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dce2f7',
     padding: 16,
+  },
+  formHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  draftStatus: {
+    marginTop: 4,
+    color: '#5f6d8a',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  discardDraftButton: {
+    borderWidth: 1,
+    borderColor: '#f0c5bd',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#fff5f3',
+  },
+  discardDraftButtonText: {
+    color: '#b23b2e',
+    fontWeight: '700',
+    fontSize: 13,
   },
   listHeader: {
     marginTop: 24,

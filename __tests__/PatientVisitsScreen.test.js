@@ -4,11 +4,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 import PatientVisitsScreen from '../src/PatientVisitsScreen';
 import {
+  addVisit,
+  clearDraftVisit,
   getBalanceSummary,
   getAppSettings,
+  getDraftVisit,
   getMedicines,
   getVisitMedicines,
   getVisits,
+  saveDraftVisit,
 } from '../src/database';
 
 jest.mock('../src/database', () => ({
@@ -19,6 +23,9 @@ jest.mock('../src/database', () => ({
   getClinicProfile: jest.fn(),
   getAppSettings: jest.fn(),
   addVisit: jest.fn(),
+  getDraftVisit: jest.fn(),
+  saveDraftVisit: jest.fn(),
+  clearDraftVisit: jest.fn(),
 }));
 
 jest.mock('../src/prescriptionPdf', () => ({
@@ -51,6 +58,10 @@ describe('PatientVisitsScreen', () => {
     jest.clearAllMocks();
     getVisits.mockResolvedValue([]);
     getVisitMedicines.mockResolvedValue([]);
+    getDraftVisit.mockResolvedValue(null);
+    saveDraftVisit.mockResolvedValue(undefined);
+    clearDraftVisit.mockResolvedValue(undefined);
+    addVisit.mockResolvedValue(44);
     getBalanceSummary.mockResolvedValue({
       patientBalance: 0,
       familyBalance: 0,
@@ -223,5 +234,128 @@ describe('PatientVisitsScreen', () => {
     expect(scrollSpy).toHaveBeenCalledWith({ y: 88, animated: true });
 
     scrollSpy.mockRestore();
+  });
+
+  test('restores an existing draft visit for the patient', async () => {
+    getDraftVisit.mockResolvedValue({
+      visitDate: '2026-05-20',
+      complaints: 'Cough',
+      diagnosis: 'Bronchitis',
+      investigations: '',
+      procedures: '',
+      findings: '',
+      bp: '120/80',
+      weight: '72',
+      weightUnit: 'kg',
+      notes: 'Follow up in one week',
+      visitCost: '150',
+      paymentAmount: '25',
+      paymentScope: 'family',
+      draftMed: {
+        name: 'Azithro',
+        dosage: '250mg',
+        frequency: '',
+        intervalDays: 1,
+        duration: '',
+        route: 'Oral',
+        instructions: '',
+      },
+      medicines: [
+        {
+          draftId: 7,
+          name: 'Paracetamol',
+          dosage: '500mg',
+          frequency: '',
+          intervalDays: 1,
+          duration: '3 days',
+          route: 'Oral',
+          instructions: '',
+        },
+      ],
+    });
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2026-05-20')).toBeTruthy();
+    });
+
+    expect(screen.getByDisplayValue('Cough')).toBeTruthy();
+    expect(screen.getByDisplayValue('Bronchitis')).toBeTruthy();
+    expect(screen.getByDisplayValue('Azithro')).toBeTruthy();
+    expect(screen.getByText('Paracetamol')).toBeTruthy();
+    expect(screen.getByText('Draft restored')).toBeTruthy();
+  });
+
+  test('autosaves meaningful draft changes', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    fireEvent.changeText(screen.getByPlaceholderText('Chief complaints'), 'Headache');
+
+    await waitFor(() => {
+      expect(saveDraftVisit).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({ complaints: 'Headache' })
+      );
+    });
+    expect(screen.getByText('Draft saved')).toBeTruthy();
+  });
+
+  test('successful visit creation clears the draft', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Current medicines (1)')).toBeTruthy();
+    });
+
+    fireEvent.changeText(screen.getByPlaceholderText('Chief complaints'), 'Fever');
+    fireEvent.press(screen.getByText('Create Visit'));
+
+    await waitFor(() => {
+      expect(addVisit).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({ complaints: 'Fever' })
+      );
+    });
+    expect(clearDraftVisit).toHaveBeenCalledWith(9);
+    expect(screen.getByPlaceholderText('Chief complaints').props.value).toBe('');
+  });
+
+  test('discard draft clears the form and removes stored draft', async () => {
+    getDraftVisit.mockResolvedValue({
+      visitDate: '2026-05-20',
+      complaints: 'Cough',
+      diagnosis: '',
+      investigations: '',
+      procedures: '',
+      findings: '',
+      bp: '',
+      weight: '',
+      weightUnit: 'kg',
+      notes: '',
+      visitCost: '',
+      paymentAmount: '',
+      paymentScope: 'patient',
+      draftMed: {},
+      medicines: [],
+    });
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Cough')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('discard-draft-visit-button'));
+
+    await waitFor(() => {
+      expect(clearDraftVisit).toHaveBeenCalledWith(9);
+    });
+    expect(screen.getByPlaceholderText('Chief complaints').props.value).toBe('');
+    expect(screen.queryByText('Draft restored')).toBeNull();
   });
 });

@@ -55,6 +55,7 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS gestures'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS clinic_profile'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS app_settings'));
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS draft_visits'));
   });
 
   test('getAppSettings returns INR by default', async () => {
@@ -343,6 +344,135 @@ describe('database', () => {
       expect.stringContaining('INNER JOIN patients p ON p.id = v.patient_id'),
       ['2026-05-01', '2026-05-31']
     );
+  });
+
+  test('draft visit helpers save, parse, and clear patient drafts', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('FROM draft_visits')) {
+        expect(params).toEqual([9]);
+        return {
+          patient_id: 9,
+          visit_date: '2026-05-20',
+          complaints: 'Cough',
+          diagnosis: 'URI',
+          investigations: '',
+          procedures: '',
+          findings: '',
+          bp: '120/80',
+          weight: '72',
+          weight_unit: 'kg',
+          notes: 'Review',
+          visit_cost: '150',
+          payment_amount: '25',
+          payment_scope: 'family',
+          draft_med_json: '{"name":"Azithro","intervalDays":1}',
+          medicines_json: '[{"draftId":1,"name":"Paracetamol"}]',
+          updated_at: '2026-05-20 10:00:00',
+        };
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    await database.saveDraftVisit(9, {
+      visitDate: '2026-05-20',
+      complaints: 'Cough',
+      diagnosis: 'URI',
+      investigations: '',
+      procedures: '',
+      findings: '',
+      bp: '120/80',
+      weight: '72',
+      weightUnit: 'kg',
+      notes: 'Review',
+      visitCost: '150',
+      paymentAmount: '25',
+      paymentScope: 'family',
+      draftMed: { name: 'Azithro', intervalDays: 1 },
+      medicines: [{ draftId: 1, name: 'Paracetamol' }],
+    });
+    const draft = await database.getDraftVisit(9);
+    await database.clearDraftVisit(9);
+
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('INSERT INTO draft_visits'),
+      [
+        9,
+        '2026-05-20',
+        'Cough',
+        'URI',
+        '',
+        '',
+        '',
+        '120/80',
+        '72',
+        'kg',
+        'Review',
+        '150',
+        '25',
+        'family',
+        JSON.stringify({ name: 'Azithro', intervalDays: 1 }),
+        JSON.stringify([{ draftId: 1, name: 'Paracetamol' }]),
+      ]
+    );
+    expect(draft).toEqual({
+      visitDate: '2026-05-20',
+      complaints: 'Cough',
+      diagnosis: 'URI',
+      investigations: '',
+      procedures: '',
+      findings: '',
+      bp: '120/80',
+      weight: '72',
+      weightUnit: 'kg',
+      notes: 'Review',
+      visitCost: '150',
+      paymentAmount: '25',
+      paymentScope: 'family',
+      draftMed: { name: 'Azithro', intervalDays: 1 },
+      medicines: [{ draftId: 1, name: 'Paracetamol' }],
+      updatedAt: '2026-05-20 10:00:00',
+    });
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      2,
+      'DELETE FROM draft_visits WHERE patient_id = ?',
+      [9]
+    );
+  });
+
+  test('getDraftVisit returns safe defaults for invalid draft json', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM draft_visits')) {
+        return {
+          visit_date: '',
+          complaints: '',
+          diagnosis: '',
+          investigations: '',
+          procedures: '',
+          findings: '',
+          bp: '',
+          weight: '',
+          weight_unit: '',
+          notes: '',
+          visit_cost: '',
+          payment_amount: '',
+          payment_scope: 'patient',
+          draft_med_json: '{bad',
+          medicines_json: '{bad',
+        };
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const draft = await database.getDraftVisit(9);
+
+    expect(draft.draftMed).toEqual({});
+    expect(draft.medicines).toEqual([]);
+    expect(draft.paymentScope).toBe('patient');
   });
 
   test('gesture helpers list, insert, and delete gestures', async () => {
