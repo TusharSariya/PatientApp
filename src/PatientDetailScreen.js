@@ -20,7 +20,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import { useGestureTextInput } from './GestureInputProvider';
 import { formatMoney } from './currency';
-import { getAppSettings, getBalanceSummary } from './database';
+import { getAppSettings, getBalanceSummary, updatePatient } from './database';
+import { formatPatientAge } from './patientAge';
+import { formatPatientNameParts, splitPatientName } from './patientName';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
@@ -49,29 +51,62 @@ function composeHandlers(...handlers) {
   };
 }
 
+function buildPatientForm(patient) {
+  const parsedName = splitPatientName(patient.name ?? '');
+  return {
+    firstName: patient.first_name ?? parsedName.firstName,
+    middleName: patient.middle_name ?? parsedName.middleName,
+    lastName: patient.last_name ?? parsedName.lastName,
+    dob: patient.dob ?? '',
+    phone: patient.phone ?? '',
+    address: patient.address ?? '',
+    notes: patient.notes ?? '',
+  };
+}
+
+function patientFromForm(patient, form) {
+  return {
+    ...patient,
+    first_name: form.firstName,
+    middle_name: form.middleName,
+    last_name: form.lastName,
+    name: formatPatientNameParts(form.firstName, form.middleName, form.lastName),
+    dob: form.dob,
+    phone: form.phone,
+    address: form.address,
+    notes: form.notes,
+  };
+}
+
 const Field = React.forwardRef(({
   label,
   value,
   onChange,
+  editable,
   onFocus,
   onBlur,
   onSelectionChange,
   selection,
   showSoftInputOnFocus,
   multiline,
+  keyboardType,
+  testID,
 }, ref) => (
   <View style={styles.fieldGroup}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <TextInput
       ref={ref}
-      style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
+      testID={testID}
+      style={[styles.fieldInput, !editable && styles.fieldInputReadOnly, multiline && styles.fieldInputMultiline]}
       value={value}
       onChangeText={onChange}
-      showSoftInputOnFocus={showSoftInputOnFocus}
+      editable={editable}
+      showSoftInputOnFocus={editable ? showSoftInputOnFocus : false}
       onFocus={onFocus}
       onBlur={onBlur}
       onSelectionChange={onSelectionChange}
       selection={selection}
+      keyboardType={keyboardType}
       multiline={multiline}
       numberOfLines={multiline ? 3 : 1}
       textAlignVertical={multiline ? 'top' : 'center'}
@@ -83,16 +118,23 @@ const Field = React.forwardRef(({
 
 export default function PatientDetailScreen({ route, navigation }) {
   const { patient } = route.params;
+  const [savedPatient, setSavedPatient] = useState(patient);
+  const [form, setForm] = useState(() => buildPatientForm(patient));
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const patientAge = formatPatientAge(form.dob);
+  const displayedName = formatPatientNameParts(form.firstName, form.middleName, form.lastName) || savedPatient.name;
   const [recognizing, setRecognizing] = useState(false);
   const [balances, setBalances] = useState({ patientBalance: 0, familyBalance: 0 });
   const [currencyCode, setCurrencyCode] = useState('INR');
-  const [notes, setNotes] = useState('');
 
   const notesRef = useRef(null);
-  const notesInput = useGestureTextInput({ label: 'Notes', value: notes, setValue: setNotes, inputRef: notesRef });
+  const setNotes = (value) => setForm((current) => ({ ...current, notes: value }));
+  const notesInput = useGestureTextInput({ label: 'Notes', value: form.notes, setValue: setNotes, inputRef: notesRef });
 
   const dictationFields = [
-    { ref: notesRef, setter: setNotes, value: notes, label: 'Notes', multiline: true, input: notesInput },
+    { ref: notesRef, setter: setNotes, value: form.notes, label: 'Notes', multiline: true, input: notesInput },
   ];
 
   const activeIndexRef = useRef(0);
@@ -124,12 +166,20 @@ export default function PatientDetailScreen({ route, navigation }) {
     };
   }, [fabBottom]);
 
+  React.useEffect(() => {
+    setSavedPatient(patient);
+    setForm(buildPatientForm(patient));
+    setDetailsExpanded(false);
+    setEditing(false);
+    setRecognizing(false);
+  }, [patient]);
+
   useFocusEffect(
     React.useCallback(() => {
       let isActive = true;
       (async () => {
         const [summary, settings] = await Promise.all([
-          getBalanceSummary(patient.id),
+          getBalanceSummary(savedPatient.id),
           getAppSettings(),
         ]);
         if (isActive) {
@@ -143,7 +193,7 @@ export default function PatientDetailScreen({ route, navigation }) {
       return () => {
         isActive = false;
       };
-    }, [patient.id])
+    }, [savedPatient.id])
   );
 
   useSpeechRecognitionEvent('start', () => {
@@ -177,6 +227,7 @@ export default function PatientDetailScreen({ route, navigation }) {
     lastTranscriptRef.current = text;
     if (!chunk) return;
 
+    if (!editing) return;
     const next = insertDictationAtSelection(field.value, field.input.selection, chunk);
     field.setter(next.value);
     field.input.setSelection?.({ start: next.cursor, end: next.cursor });
@@ -189,18 +240,15 @@ export default function PatientDetailScreen({ route, navigation }) {
   });
 
   function openMedicines() {
-    navigation.navigate('PatientMedicines', { patient });
+    navigation.navigate('PatientMedicines', { patient: savedPatient });
   }
 
   function openVisits() {
-    navigation.navigate('PatientVisits', { patient });
-  }
-
-  function openEditPatient() {
-    navigation.navigate('EditPatient', { patient });
+    navigation.navigate('PatientVisits', { patient: savedPatient });
   }
 
   async function handlePress() {
+    if (!editing) return;
     if (recognizing) {
       shouldAdvanceRef.current = true;
       ExpoSpeechRecognitionModule.stop();
@@ -219,28 +267,151 @@ export default function PatientDetailScreen({ route, navigation }) {
     if (recognizing) ExpoSpeechRecognitionModule.stop();
   }
 
+  function updateFormField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleDetailsExpanded() {
+    if (editing) return;
+    setDetailsExpanded((expanded) => !expanded);
+  }
+
+  async function handleDetailsAction() {
+    if (!editing) {
+      setEditing(true);
+      return;
+    }
+
+    const nextForm = {
+      firstName: form.firstName.trim(),
+      middleName: form.middleName.trim(),
+      lastName: form.lastName.trim(),
+      dob: form.dob.trim(),
+      phone: form.phone.trim(),
+      address: form.address.trim(),
+      notes: form.notes.trim(),
+    };
+
+    if (!nextForm.firstName || !nextForm.lastName) {
+      Alert.alert('Missing Fields', 'Please fill in first name and last name.');
+      return;
+    }
+
+    setSavingDetails(true);
+    try {
+      await updatePatient(savedPatient.id, nextForm);
+      const nextPatient = patientFromForm(savedPatient, nextForm);
+      setSavedPatient(nextPatient);
+      setForm(nextForm);
+      setEditing(false);
+      navigation.setParams?.({ patient: nextPatient });
+    } catch {
+      Alert.alert('Error', 'Failed to update patient details.');
+    } finally {
+      setSavingDetails(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.infoCard}>
-          <Text style={styles.name}>{patient.name}</Text>
-          {patient.family_id ? <Text style={styles.detail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
-          {patient.dob ? <Text style={styles.detail}>🎂 {patient.dob}</Text> : null}
-          <Text style={styles.detail}>📞 {patient.phone}</Text>
-          <Text style={styles.detail}>📍 {patient.address}</Text>
+          <Text style={styles.name}>{displayedName}</Text>
+          {savedPatient.family_id ? <Text style={styles.detail}>Family #{savedPatient.family_id}</Text> : null}
+          {patientAge ? <Text style={styles.ageDetail}>{patientAge}</Text> : null}
           <Text style={styles.detail}>Patient Balance: {formatMoney(balances.patientBalance, currencyCode)}</Text>
           <Text style={styles.detail}>Family Balance: {formatMoney(balances.familyBalance, currencyCode)}</Text>
         </View>
 
-        <TouchableOpacity style={styles.medCard} onPress={openEditPatient} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.medCard}
+          onPress={toggleDetailsExpanded}
+          activeOpacity={0.8}
+          testID="patient-details-menu-card"
+        >
           <View style={{ flex: 1 }}>
             <Text style={styles.medTitle}>Patient Details</Text>
-            <Text style={styles.medSubtitle}>Open editable demographics and contact details.</Text>
+            <Text style={styles.medSubtitle}>View demographics, contact details, age, and notes.</Text>
           </View>
           <View style={styles.medButton}>
-            <Text style={styles.medButtonText}>Open</Text>
+            <Text style={styles.medButtonText}>{detailsExpanded ? 'Close' : 'Open'}</Text>
           </View>
         </TouchableOpacity>
+
+        {detailsExpanded ? (
+          <View style={styles.detailsPanel} testID="patient-details-panel">
+            <Field
+              label="First Name"
+              testID="patient-detail-first-name"
+              value={form.firstName}
+              onChange={(value) => updateFormField('firstName', value)}
+              editable={editing}
+            />
+            <Field
+              label="Middle Name"
+              testID="patient-detail-middle-name"
+              value={form.middleName}
+              onChange={(value) => updateFormField('middleName', value)}
+              editable={editing}
+            />
+            <Field
+              label="Last Name"
+              testID="patient-detail-last-name"
+              value={form.lastName}
+              onChange={(value) => updateFormField('lastName', value)}
+              editable={editing}
+            />
+            <Field
+              label="Date of Birth"
+              testID="patient-detail-dob"
+              value={form.dob}
+              onChange={(value) => updateFormField('dob', value)}
+              editable={editing}
+            />
+            {patientAge ? <Text style={styles.ageDetail}>{patientAge}</Text> : null}
+            <Field
+              label="Phone"
+              testID="patient-detail-phone"
+              value={form.phone}
+              onChange={(value) => updateFormField('phone', value)}
+              editable={editing}
+              keyboardType="phone-pad"
+            />
+            <Field
+              label="Address"
+              testID="patient-detail-address"
+              value={form.address}
+              onChange={(value) => updateFormField('address', value)}
+              editable={editing}
+              multiline
+            />
+            <Field
+              ref={notesRef}
+              label="Notes"
+              testID="patient-detail-notes"
+              value={form.notes}
+              onChange={setNotes}
+              editable={editing}
+              onFocus={composeHandlers(notesInput.onFocus, () => { activeIndexRef.current = 0; })}
+              onBlur={notesInput.onBlur}
+              onSelectionChange={notesInput.onSelectionChange}
+              selection={notesInput.selection}
+              showSoftInputOnFocus={notesInput.showSoftInputOnFocus}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.detailsActionButton, savingDetails && styles.detailsActionButtonDisabled]}
+              onPress={handleDetailsAction}
+              disabled={savingDetails}
+              testID="patient-detail-edit-save-button"
+            >
+              <Text style={styles.detailsActionButtonText}>
+                {savingDetails ? 'Saving...' : editing ? 'Save' : 'Edit'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
           <View style={{ flex: 1 }}>
             <Text style={styles.medTitle}>Visits</Text>
@@ -259,24 +430,10 @@ export default function PatientDetailScreen({ route, navigation }) {
             <Text style={styles.medButtonText}>Open</Text>
           </View>
         </TouchableOpacity>
-        {dictationFields.map((f, i) => (
-          <Field
-            key={f.label}
-            ref={f.ref}
-            label={f.label}
-            value={f.value}
-            onChange={f.setter}
-            onFocus={composeHandlers(f.input.onFocus, () => { activeIndexRef.current = i; })}
-            onBlur={f.input.onBlur}
-            onSelectionChange={f.input.onSelectionChange}
-            selection={f.input.selection}
-            showSoftInputOnFocus={f.input.showSoftInputOnFocus}
-            multiline={f.multiline}
-          />
-        ))}
       </ScrollView>
 
-      <Animated.View style={[styles.fab, { bottom: fabBottom }]}>
+      {editing ? (
+        <Animated.View style={[styles.fab, { bottom: fabBottom }]}>
         <Pressable
           style={[styles.fabInner, recognizing && styles.fabActive]}
           onPress={handlePress}
@@ -285,7 +442,8 @@ export default function PatientDetailScreen({ route, navigation }) {
         >
           <Text style={styles.fabIcon}>{recognizing ? '⏹' : '🎙'}</Text>
         </Pressable>
-      </Animated.View>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -322,6 +480,18 @@ const styles = StyleSheet.create({
     color: '#555',
     marginTop: 4,
   },
+  ageDetail: {
+    backgroundColor: '#f3f6ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    color: '#2f46c7',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   medCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -354,6 +524,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  detailsPanel: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    marginTop: 10,
+    padding: 16,
+  },
   fieldGroup: {
     marginBottom: 20,
   },
@@ -375,9 +553,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1a1a2e',
   },
+  fieldInputReadOnly: {
+    backgroundColor: '#f7f8fc',
+    color: '#5f6d8a',
+  },
   fieldInputMultiline: {
     height: 88,
     textAlignVertical: 'top',
+  },
+  detailsActionButton: {
+    marginTop: 4,
+    backgroundColor: '#4f6ef7',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  detailsActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  detailsActionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   fab: {
     position: 'absolute',

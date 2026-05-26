@@ -50,6 +50,7 @@ const PATIENT_SELECT_SQL = `
     family_id,
     phone,
     address,
+    notes,
     ${PATIENT_NAME_SQL} AS name
   FROM patients
 `;
@@ -75,7 +76,8 @@ async function migratePatientsTable(database) {
       dob TEXT NOT NULL DEFAULT '',
       family_id INTEGER,
       phone TEXT NOT NULL,
-      address TEXT NOT NULL
+      address TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT ''
     );
   `);
 
@@ -86,8 +88,8 @@ async function migratePatientsTable(database) {
     const lastName = row.last_name?.trim?.() || parsed.lastName;
 
     await database.runAsync(
-      'INSERT INTO patients (id, first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [row.id, firstName, middleName, lastName, row.dob ?? '', row.family_id ?? null, row.phone ?? '', row.address ?? '']
+      'INSERT INTO patients (id, first_name, middle_name, last_name, dob, family_id, phone, address, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [row.id, firstName, middleName, lastName, row.dob ?? '', row.family_id ?? null, row.phone ?? '', row.address ?? '', row.notes ?? '']
     );
   }
 
@@ -113,6 +115,14 @@ async function ensurePatientsDobColumn(database) {
   const columnNames = new Set(columns.map(column => column.name));
   if (!columnNames.has('dob')) {
     await database.execAsync("ALTER TABLE patients ADD COLUMN dob TEXT NOT NULL DEFAULT '';");
+  }
+}
+
+async function ensurePatientsNotesColumn(database) {
+  const columns = await database.getAllAsync('PRAGMA table_info(patients)');
+  const columnNames = new Set(columns.map(column => column.name));
+  if (!columnNames.has('notes')) {
+    await database.execAsync("ALTER TABLE patients ADD COLUMN notes TEXT NOT NULL DEFAULT '';");
   }
 }
 
@@ -428,7 +438,8 @@ export async function getDb() {
         dob TEXT NOT NULL DEFAULT '',
         family_id INTEGER,
         phone TEXT NOT NULL,
-        address TEXT NOT NULL
+        address TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT ''
       );
       CREATE TABLE IF NOT EXISTS medicines (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -512,6 +523,7 @@ export async function getDb() {
     await ensureAppSettingsSchema(db);
     await ensurePatientsSchema(db);
     await ensurePatientsDobColumn(db);
+    await ensurePatientsNotesColumn(db);
     await ensureFamiliesSchema(db);
     await ensurePatientsFamilyColumn(db);
     await ensurePatientFamilyAssignments(db);
@@ -648,7 +660,7 @@ export async function searchFamiliesByRelativeName(query) {
   );
 }
 
-export async function updatePatient(patientId, { firstName, middleName, lastName, dob, phone, address }) {
+export async function updatePatient(patientId, { firstName, middleName, lastName, dob, phone, address, notes }) {
   const database = await getDb();
   await database.runAsync(
     `
@@ -659,10 +671,11 @@ export async function updatePatient(patientId, { firstName, middleName, lastName
         last_name = ?,
         dob = ?,
         phone = ?,
-        address = ?
+        address = ?,
+        notes = ?
       WHERE id = ?
     `,
-    [firstName, middleName ?? '', lastName, dob ?? '', phone, address, patientId]
+    [firstName, middleName ?? '', lastName, dob ?? '', phone ?? '', address ?? '', notes ?? '', patientId]
   );
 }
 

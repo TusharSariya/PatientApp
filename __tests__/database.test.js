@@ -9,6 +9,9 @@ function expectedPatientColumns() {
     { name: 'last_name' },
     { name: 'dob' },
     { name: 'family_id' },
+    { name: 'phone' },
+    { name: 'address' },
+    { name: 'notes' },
   ];
 }
 
@@ -125,6 +128,40 @@ describe('database', () => {
       expect.stringContaining('INSERT INTO patients'),
       ['Jane', '', 'Public', '1999-12-31', 45, '555', '2 Main']
     );
+  });
+
+  test('updatePatient persists demographics contact fields and notes', async () => {
+    const db = createMockDb();
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    await database.updatePatient(7, {
+      firstName: 'Jane',
+      middleName: 'Q',
+      lastName: 'Public',
+      dob: '2000-01-01',
+      phone: '',
+      address: '',
+      notes: 'Follow-up notes',
+    });
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE patients'),
+      ['Jane', 'Q', 'Public', '2000-01-01', '', '', 'Follow-up notes', 7]
+    );
+  });
+
+  test('adds patient notes column for existing databases', async () => {
+    const db = createMockDb();
+    db.getAllAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) {
+        return expectedPatientColumns().filter((column) => column.name !== 'notes');
+      }
+      return [];
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+    await database.getDb();
+
+    expect(db.execAsync).toHaveBeenCalledWith("ALTER TABLE patients ADD COLUMN notes TEXT NOT NULL DEFAULT '';");
   });
 
   test('searchPatients builds prefix SQL with ordering and normalized params', async () => {
