@@ -70,8 +70,8 @@ export default function AddPatientScreen() {
   }, [relativeNameQuery]);
 
   async function handleSave() {
-    if (!firstName.trim() || !lastName.trim() || !phone.trim() || !address.trim()) {
-      Alert.alert('Missing Fields', 'Please fill in first name, last name, phone number, and address.');
+    if (!firstName.trim() || !lastName.trim()) {
+      Alert.alert('Missing Fields', 'Please fill in first name and last name.');
       return;
     }
     if (relativeNameQuery.trim() && !selectedFamily) {
@@ -163,7 +163,7 @@ export default function AddPatientScreen() {
           autoCapitalize="words"
         />
 
-        <Text style={styles.label}>Phone Number</Text>
+        <Text style={styles.label}>Phone Number (Optional)</Text>
         <TextInput
           style={styles.input}
           placeholder="e.g. 555-123-4567"
@@ -232,7 +232,7 @@ export default function AddPatientScreen() {
           selection={dobInput.selection}
         />
 
-        <Text style={styles.label}>Address</Text>
+        <Text style={styles.label}>Address (Optional)</Text>
         <TextInput
           ref={addressInput.ref}
           style={[styles.input, styles.multiline]}

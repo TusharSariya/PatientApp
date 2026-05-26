@@ -584,7 +584,7 @@ export async function addPatient(firstName, middleName, lastName, dob, phone, ad
 
   const result = await database.runAsync(
     'INSERT INTO patients (first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [firstName, middleName ?? '', lastName, dob ?? '', resolvedFamilyId, phone, address]
+    [firstName, middleName ?? '', lastName, dob ?? '', resolvedFamilyId, phone ?? '', address ?? '']
   );
   return {
     patientId: result.lastInsertRowId,
