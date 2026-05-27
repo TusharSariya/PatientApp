@@ -749,6 +749,7 @@ export default function PatientVisitsScreen({ route }) {
             ].map((scopeOption) => (
               <TouchableOpacity
                 key={scopeOption.id}
+                testID={`payment-scope-${scopeOption.id}`}
                 style={[styles.routeChip, paymentScope === scopeOption.id && styles.routeChipActive]}
                 onPress={() => setPaymentScope(scopeOption.id)}
               >
@@ -759,6 +760,7 @@ export default function PatientVisitsScreen({ route }) {
             ))}
           </View>
           <TouchableOpacity
+            testID="create-visit-button"
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleCreateVisit}
             disabled={saving}
@@ -795,6 +797,7 @@ export default function PatientVisitsScreen({ route }) {
                 </Text>
               ) : null}
               <TouchableOpacity
+                testID={`prescription-pdf-${visit.id}`}
                 style={[styles.prescriptionBtn, sharingVisitId === visit.id && styles.prescriptionBtnDisabled]}
                 onPress={() => handlePrescriptionPdf(visit)}
                 disabled={sharingVisitId != null}

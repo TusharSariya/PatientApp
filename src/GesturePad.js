@@ -109,6 +109,7 @@ export default function GesturePad({
   return (
     <View style={fill ? styles.rootFill : null}>
       <View
+        testID="gesture-pad"
         style={[
           styles.pad,
           fill ? styles.padFill : styles.padDefaultHeight,

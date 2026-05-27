@@ -2,11 +2,14 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import PatientMedicinesScreen from '../src/PatientMedicinesScreen';
+import { Alert } from 'react-native';
 import {
   addMedicine,
+  deleteMedicine,
   getMedicineHistory,
   getMedicines,
 } from '../src/database';
+import { pressAlertButton, spyAlert } from './helpers/matrix';
 
 jest.mock('../src/database', () => ({
   getMedicines: jest.fn(),
@@ -120,5 +123,38 @@ describe('PatientMedicinesScreen', () => {
     }
 
     expect(screen.getByTestId('patient-medicine-interval-value').props.children).toBe(30);
+  });
+
+  test('shows validation when medicine name missing', async () => {
+    const alertSpy = spyAlert();
+    render(<PatientMedicinesScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(getMedicines).toHaveBeenCalledWith(9));
+    fireEvent.press(screen.getByText('+ Add'));
+    fireEvent.press(screen.getByText('Save Medicine'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    alertSpy.mockRestore();
+  });
+
+  test('deletes medicine after confirmation', async () => {
+    const alertSpy = spyAlert();
+    deleteMedicine.mockResolvedValue(undefined);
+    render(<PatientMedicinesScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Ibuprofen')).toBeTruthy());
+    fireEvent.press(screen.getByText('Ibuprofen'));
+    fireEvent.press(screen.getByText('Delete Medicine'));
+    pressAlertButton(alertSpy, 1);
+    await waitFor(() => expect(deleteMedicine).toHaveBeenCalledWith(1));
+    alertSpy.mockRestore();
+  });
+
+  test('delete cancel keeps medicine', async () => {
+    const alertSpy = spyAlert();
+    render(<PatientMedicinesScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Ibuprofen')).toBeTruthy());
+    fireEvent.press(screen.getByText('Ibuprofen'));
+    fireEvent.press(screen.getByText('Delete Medicine'));
+    pressAlertButton(alertSpy, 0);
+    expect(deleteMedicine).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 });

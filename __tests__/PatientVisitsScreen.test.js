@@ -8,12 +8,15 @@ import {
   clearDraftVisit,
   getBalanceSummary,
   getAppSettings,
+  getClinicProfile,
   getDraftVisit,
   getMedicines,
   getVisitMedicines,
   getVisits,
   saveDraftVisit,
 } from '../src/database';
+import { sharePrescriptionPdf } from '../src/prescriptionPdf';
+import { getLastAlertTitle, spyAlert } from './helpers/matrix';
 
 jest.mock('../src/database', () => ({
   getVisits: jest.fn(),
@@ -56,6 +59,7 @@ describe('PatientVisitsScreen', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    getClinicProfile.mockResolvedValue({ doctorName: 'Dr Test' });
     getVisits.mockResolvedValue([]);
     getVisitMedicines.mockResolvedValue([]);
     getDraftVisit.mockResolvedValue(null);
@@ -357,5 +361,106 @@ describe('PatientVisitsScreen', () => {
     });
     expect(screen.getByPlaceholderText('Chief complaints').props.value).toBe('');
     expect(screen.queryByText('Draft restored')).toBeNull();
+  });
+
+  test('renders visit history with medicines and balances', async () => {
+    getVisits.mockResolvedValue([
+      {
+        id: 10,
+        patient_id: 9,
+        visit_date: '2026-05-01',
+        complaints: 'Headache',
+        diagnosis: 'Migraine',
+        visit_cost: 200,
+        weight: '70',
+        weight_unit: 'kg',
+        notes: '',
+      },
+    ]);
+    getVisitMedicines.mockResolvedValue([{ id: 1, visit_id: 10, name: 'Ibuprofen', interval_days: 2 }]);
+    getBalanceSummary.mockResolvedValue({ patientBalance: 150, familyBalance: 300 });
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Complaints: Headache')).toBeTruthy();
+      expect(screen.getByText(/Medicines: Ibuprofen/)).toBeTruthy();
+    });
+    expect(screen.getAllByText(/Patient Balance/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Family Balance/).length).toBeGreaterThan(0);
+  });
+
+  test('create visit with family payment scope calls addVisit with payment', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Current medicines (1)')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('payment-scope-family'));
+    fireEvent.changeText(screen.getByPlaceholderText('Chief complaints'), 'Cough');
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. 150'), '200');
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. 50'), '75');
+    fireEvent.press(screen.getByTestId('create-visit-button'));
+
+    await waitFor(() => {
+      expect(addVisit).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({
+          paymentScope: 'family',
+          paymentAmount: '75',
+          visitCost: '200',
+        })
+      );
+    });
+  });
+
+  test('shows validation when creating visit without visit date', async () => {
+    const alertSpy = spyAlert();
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Current medicines (1)')).toBeTruthy());
+    fireEvent.changeText(screen.getByPlaceholderText('YYYY-MM-DD'), '');
+    fireEvent.press(screen.getByTestId('create-visit-button'));
+    await waitFor(() => expect(getLastAlertTitle(alertSpy)).toBe('Required'));
+    alertSpy.mockRestore();
+  });
+
+  test('shares prescription PDF for a past visit', async () => {
+    getVisits.mockResolvedValue([
+      { id: 10, patient_id: 9, visit_date: '2026-05-01', complaints: 'Fever', visit_cost: 0 },
+    ]);
+    getVisitMedicines.mockResolvedValue([]);
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByTestId('prescription-pdf-10')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('prescription-pdf-10'));
+
+    await waitFor(() => {
+      expect(sharePrescriptionPdf).toHaveBeenCalledWith(expect.stringContaining('<html'));
+    });
+  });
+
+  test('shows PDF error alert when share fails', async () => {
+    const alertSpy = spyAlert();
+    sharePrescriptionPdf.mockRejectedValue(new Error('share fail'));
+    getVisits.mockResolvedValue([
+      { id: 10, patient_id: 9, visit_date: '2026-05-01', complaints: 'Fever', visit_cost: 0 },
+    ]);
+
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByTestId('prescription-pdf-10')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('prescription-pdf-10'));
+
+    await waitFor(() => expect(getLastAlertTitle(alertSpy)).toBe('Prescription'));
+    alertSpy.mockRestore();
+  });
+
+  test('weight unit toggle switches between kg and lbs', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Current medicines (1)')).toBeTruthy());
+    fireEvent.press(screen.getByText('lbs'));
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. 72'), '160');
+    fireEvent.changeText(screen.getByPlaceholderText('Chief complaints'), 'Checkup');
+    fireEvent.press(screen.getByTestId('create-visit-button'));
+    await waitFor(() => {
+      expect(addVisit).toHaveBeenCalledWith(9, expect.objectContaining({ weightUnit: 'lbs', weight: '160' }));
+    });
   });
 });

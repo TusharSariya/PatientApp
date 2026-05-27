@@ -8,6 +8,7 @@ export default function HomeScreen({ navigation }) {
       <Text style={styles.subtitle}>What would you like to do?</Text>
 
       <TouchableOpacity
+        testID="home-card-add-patient"
         style={styles.card}
         onPress={() => navigation.navigate('AddPatient')}
       >
@@ -17,6 +18,7 @@ export default function HomeScreen({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
+        testID="home-card-search"
         style={styles.card}
         onPress={() => navigation.navigate('Search')}
       >
@@ -26,6 +28,7 @@ export default function HomeScreen({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
+        testID="home-card-all-visits"
         style={styles.card}
         onPress={() => navigation.navigate('AllVisits')}
       >
@@ -35,6 +38,7 @@ export default function HomeScreen({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
+        testID="home-card-clinic-profile"
         style={styles.card}
         onPress={() => navigation.navigate('ClinicProfile')}
       >
@@ -44,6 +48,7 @@ export default function HomeScreen({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
+        testID="home-card-settings"
         style={styles.card}
         onPress={() => navigation.navigate('Settings')}
       >

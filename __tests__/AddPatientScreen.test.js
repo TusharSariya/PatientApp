@@ -3,7 +3,8 @@ import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import AddPatientScreen from '../src/AddPatientScreen';
-import { addPatient } from '../src/database';
+import { addPatient, searchFamiliesByRelativeName } from '../src/database';
+import { getLastAlertTitle, spyAlert } from './helpers/matrix';
 
 jest.mock('../src/database', () => ({
   addPatient: jest.fn(),
@@ -22,13 +23,15 @@ jest.mock('../src/GestureInputProvider', () => ({
 }));
 
 describe('AddPatientScreen', () => {
-  const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  let alertSpy;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    alertSpy = spyAlert();
+    searchFamiliesByRelativeName.mockResolvedValue([]);
   });
 
-  afterAll(() => {
+  afterEach(() => {
     alertSpy.mockRestore();
   });
 
@@ -43,6 +46,32 @@ describe('AddPatientScreen', () => {
       'Please fill in first name and last name.'
     );
     expect(addPatient).not.toHaveBeenCalled();
+  });
+
+  test('shows save error alert when addPatient fails', async () => {
+    addPatient.mockRejectedValue(new Error('db'));
+    render(<AddPatientScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. John'), 'John');
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. Smith'), 'Public');
+    fireEvent.press(screen.getByText('Save Patient'));
+    await waitFor(() => expect(getLastAlertTitle(alertSpy)).toBe('Error'));
+  });
+
+  test('selects family match from relative search', async () => {
+    searchFamiliesByRelativeName.mockResolvedValue([
+      { family_id: 5, relative_name: 'Ann Lee', member_count: 2 },
+    ]);
+    addPatient.mockResolvedValue({ patientId: 1, familyId: 5, createdNewFamily: false });
+    render(<AddPatientScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Type relative name (e.g. Alice Johnson)'), 'Lee');
+    await waitFor(() => expect(screen.getByText('Family #5')).toBeTruthy());
+    fireEvent.press(screen.getByText('Family #5'));
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. John'), 'John');
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. Smith'), 'Lee');
+    fireEvent.press(screen.getByText('Save Patient'));
+    await waitFor(() => {
+      expect(addPatient).toHaveBeenCalledWith('John', '', 'Lee', '', '', '', '5');
+    });
   });
 
   test('does not render manual gesture buttons for text fields', () => {

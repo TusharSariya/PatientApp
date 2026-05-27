@@ -141,6 +141,7 @@ export default function ClinicProfileScreen() {
           />
 
           <TouchableOpacity
+            testID="clinic-profile-save"
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleSave}
             disabled={saving}

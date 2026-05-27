@@ -1,8 +1,10 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import AllVisitsScreen from '../src/AllVisitsScreen';
 import { getAppSettings, getVisitsInDateRange } from '../src/database';
+import { getLastAlertTitle, spyAlert } from './helpers/matrix';
 
 jest.mock('../src/database', () => ({
   getVisitsInDateRange: jest.fn(),
@@ -11,11 +13,17 @@ jest.mock('../src/database', () => ({
 
 describe('AllVisitsScreen', () => {
   const navigation = { navigate: jest.fn() };
+  let alertSpy;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    alertSpy = spyAlert();
     getVisitsInDateRange.mockResolvedValue([]);
     getAppSettings.mockResolvedValue({ currencyCode: 'INR' });
+  });
+
+  afterEach(() => {
+    alertSpy.mockRestore();
   });
 
   test('loads visits when View visits is pressed', async () => {
@@ -127,5 +135,38 @@ describe('AllVisitsScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('No visits in this range.')).toBeTruthy();
     });
+  });
+
+  test.each([
+    ['', '', 'Required'],
+    ['bad', '2026-05-01', 'Invalid date'],
+    ['2026-05-10', '2026-05-01', 'Invalid range'],
+  ])('validation alert for start=%s end=%s', async (start, end, expectedTitle) => {
+    render(<AllVisitsScreen navigation={navigation} />);
+    const [startInput, endInput] = screen.getAllByPlaceholderText('YYYY-MM-DD');
+    fireEvent.changeText(startInput, start);
+    fireEvent.changeText(endInput, end);
+    fireEvent.press(screen.getByTestId('view-visits-button'));
+    await waitFor(() => {
+      expect(getLastAlertTitle(alertSpy)).toBe(expectedTitle);
+    });
+    expect(getVisitsInDateRange).not.toHaveBeenCalled();
+  });
+
+  test('shows error alert when load fails', async () => {
+    getVisitsInDateRange.mockRejectedValue(new Error('db'));
+    render(<AllVisitsScreen navigation={navigation} />);
+    const [startInput, endInput] = screen.getAllByPlaceholderText('YYYY-MM-DD');
+    fireEvent.changeText(startInput, '2026-05-01');
+    fireEvent.changeText(endInput, '2026-05-31');
+    fireEvent.press(screen.getByTestId('view-visits-button'));
+    await waitFor(() => {
+      expect(getLastAlertTitle(alertSpy)).toBe('Error');
+    });
+  });
+
+  test('shows initial prompt before search', () => {
+    render(<AllVisitsScreen navigation={navigation} />);
+    expect(screen.getByText(/Choose a date range/i)).toBeTruthy();
   });
 });

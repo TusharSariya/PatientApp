@@ -28,4 +28,18 @@ describe('MedicationFrequencyField', () => {
     render(<MedicationFrequencyField value="PRN" onChange={jest.fn()} />);
     expect(screen.getByTestId('frequency-custom').props.value).toBe('PRN');
   });
+
+  test.each([1, 2, 3, 4])('preset %i selects Nx/day format', (preset) => {
+    const onChange = jest.fn();
+    render(<MedicationFrequencyField value="" onChange={onChange} />);
+    fireEvent.press(screen.getByTestId(`frequency-preset-${preset}`));
+    expect(onChange).toHaveBeenCalledWith(`${preset}x/day`);
+  });
+
+  test('switching from preset to custom updates value', () => {
+    const onChange = jest.fn();
+    render(<MedicationFrequencyField value="2x/day" onChange={onChange} />);
+    fireEvent.changeText(screen.getByTestId('frequency-custom'), 'Every 8 hours');
+    expect(onChange).toHaveBeenCalledWith('Every 8 hours');
+  });
 });

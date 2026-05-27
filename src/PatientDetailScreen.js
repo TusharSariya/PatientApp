@@ -531,7 +531,7 @@ export default function PatientDetailScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
+        <TouchableOpacity testID="patient-visits-card" style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
           <View style={{ flex: 1 }}>
             <Text style={styles.medTitle}>Visits</Text>
             <Text style={styles.medSubtitle}>View visit history and create a new visit.</Text>
@@ -540,7 +540,7 @@ export default function PatientDetailScreen({ route, navigation }) {
             <Text style={styles.medButtonText}>Open</Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.medCard, { marginTop: 10 }]} onPress={openMedicines} activeOpacity={0.8}>
+        <TouchableOpacity testID="patient-medicines-card" style={[styles.medCard, { marginTop: 10 }]} onPress={openMedicines} activeOpacity={0.8}>
           <View style={{ flex: 1 }}>
             <Text style={styles.medTitle}>Medicines</Text>
             <Text style={styles.medSubtitle}>View current medicines and history.</Text>

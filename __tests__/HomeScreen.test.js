@@ -2,23 +2,25 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import HomeScreen from '../src/HomeScreen';
+import { makeNavigation } from './helpers/matrix';
 
 describe('HomeScreen', () => {
-  test('renders key actions and navigates to expected routes', () => {
-    const navigation = { navigate: jest.fn() };
+  test.each([
+    ['home-card-add-patient', 'AddPatient'],
+    ['home-card-search', 'Search'],
+    ['home-card-all-visits', 'AllVisits'],
+    ['home-card-clinic-profile', 'ClinicProfile'],
+    ['home-card-settings', 'Settings'],
+  ])('%s navigates to %s', (testID, route) => {
+    const navigation = makeNavigation();
     render(<HomeScreen navigation={navigation} />);
+    fireEvent.press(screen.getByTestId(testID));
+    expect(navigation.navigate).toHaveBeenCalledWith(route);
+  });
 
+  test('renders title and subtitle', () => {
+    render(<HomeScreen navigation={makeNavigation()} />);
     expect(screen.getByText('Patient Manager')).toBeTruthy();
-    fireEvent.press(screen.getByText('New Patient'));
-    fireEvent.press(screen.getByText('Search Patients'));
-    fireEvent.press(screen.getByText('All Visits'));
-    fireEvent.press(screen.getByText('Doctor / practice details'));
-    fireEvent.press(screen.getByText('Settings'));
-
-    expect(navigation.navigate).toHaveBeenNthCalledWith(1, 'AddPatient');
-    expect(navigation.navigate).toHaveBeenNthCalledWith(2, 'Search');
-    expect(navigation.navigate).toHaveBeenNthCalledWith(3, 'AllVisits');
-    expect(navigation.navigate).toHaveBeenNthCalledWith(4, 'ClinicProfile');
-    expect(navigation.navigate).toHaveBeenNthCalledWith(5, 'Settings');
+    expect(screen.getByText('What would you like to do?')).toBeTruthy();
   });
 });

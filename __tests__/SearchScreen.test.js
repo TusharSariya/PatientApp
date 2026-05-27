@@ -1,6 +1,17 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+jest.mock('@react-navigation/native', () => {
+  const ReactNative = jest.requireActual('@react-navigation/native');
+  const React = require('react');
+  return {
+    ...ReactNative,
+    useFocusEffect: (effect) => {
+      React.useEffect(() => effect(), [effect]);
+    },
+  };
+});
+
 import SearchScreen from '../src/SearchScreen';
 import { getAllPatients, searchPatients } from '../src/database';
 
@@ -25,7 +36,7 @@ describe('SearchScreen', () => {
     render(<SearchScreen navigation={{ navigate: jest.fn() }} />);
 
     await waitFor(() => {
-      expect(getAllPatients).toHaveBeenCalledTimes(1);
+      expect(getAllPatients).toHaveBeenCalled();
     });
 
     expect(screen.getByText('Alice Johnson')).toBeTruthy();
@@ -34,7 +45,7 @@ describe('SearchScreen', () => {
 
   test('searches by typed prefixes with normalized filters', async () => {
     render(<SearchScreen navigation={{ navigate: jest.fn() }} />);
-    await waitFor(() => expect(getAllPatients).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getAllPatients).toHaveBeenCalled());
 
     fireEvent.changeText(screen.getByPlaceholderText('Prefix, e.g. Jo'), '  Al ');
 
@@ -61,8 +72,26 @@ describe('SearchScreen', () => {
 
   test('does not render manual gesture buttons for search fields', async () => {
     render(<SearchScreen navigation={{ navigate: jest.fn() }} />);
-    await waitFor(() => expect(getAllPatients).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getAllPatients).toHaveBeenCalled());
 
     expect(screen.queryByText('Use Gesture')).toBeNull();
+  });
+
+  test('shows no match message when search returns empty', async () => {
+    searchPatients.mockResolvedValue([]);
+    render(<SearchScreen navigation={{ navigate: jest.fn() }} />);
+    await waitFor(() => expect(getAllPatients).toHaveBeenCalled());
+    fireEvent.changeText(screen.getByPlaceholderText('Prefix, e.g. Jo'), 'Zzz');
+    await waitFor(() => {
+      expect(screen.getByText(/No patients match those name prefixes/i)).toBeTruthy();
+    });
+  });
+
+  test('shows empty database message when no patients exist', async () => {
+    getAllPatients.mockResolvedValue([]);
+    render(<SearchScreen navigation={{ navigate: jest.fn() }} />);
+    await waitFor(() => {
+      expect(screen.getByText(/No patients yet. Add one!/i)).toBeTruthy();
+    });
   });
 });

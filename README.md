@@ -222,6 +222,18 @@ npx jest __tests__/GestureInputProvider.test.js
 
 You can replace the file path with any test file in `__tests__/`.
 
+### Interaction test matrix
+
+The suite includes an **interaction matrix** (~229 tests) that covers:
+
+- Every primary screen action (navigation, save, validation alerts, empty/loading/error states)
+- Cross-product **input modes** (`gestures`, `voice`, `keyboard`) with real `GesturePad` touch simulation
+- Gesture outcomes (match, no-match, invalid, undo, invert, dictation)
+- Database flows (`addVisit`, payments, balances, family search, visit history)
+- Shared helpers in `__tests__/helpers/` (`gesturePadSim.js`, `matrix.js`, `GestureFieldHarness.js`, `seedGestures.js`)
+
+Matrix-focused files include `inputModeGestureMatrix.test.js`, expanded screen tests, and `GesturePad.test.js` (real responder paths, not mocks).
+
 ---
 
 ## Building & Releasing an APK

@@ -439,4 +439,26 @@ describe('PatientDetailScreen', () => {
 
     expect(screen.getByTestId('patient-detail-notes').props.value).toBe('existing fever');
   });
+
+  test('navigates to visits screen from visits card', () => {
+    const patient = { id: 5, name: 'Alice Johnson', phone: '555', address: 'One St' };
+    const navigation = { navigate: jest.fn() };
+    render(<PatientDetailScreen route={{ params: { patient } }} navigation={navigation} />);
+    fireEvent.press(screen.getByTestId('patient-visits-card'));
+    expect(navigation.navigate).toHaveBeenCalledWith('PatientVisits', { patient });
+  });
+
+  test('displays balance summary from getBalanceSummary', async () => {
+    const { getBalanceSummary } = require('../src/database');
+    getBalanceSummary.mockResolvedValue({ patientBalance: 120, familyBalance: 340 });
+    const patient = { id: 5, name: 'Alice Johnson', phone: '555', address: 'One St' };
+    const { useFocusEffect } = require('@react-navigation/native');
+    useFocusEffect.mockImplementation((cb) => cb());
+    render(<PatientDetailScreen route={{ params: { patient } }} navigation={{ navigate: jest.fn() }} />);
+    openPatientDetails();
+    await waitFor(() => {
+      expect(screen.getByText(/Patient Balance/)).toBeTruthy();
+      expect(screen.getByText(/Family Balance/)).toBeTruthy();
+    });
+  });
 });

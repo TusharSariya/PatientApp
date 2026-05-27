@@ -38,6 +38,7 @@ export default function SettingsScreen({ navigation }) {
       {ROWS.map(row => (
         <TouchableOpacity
           key={row.key}
+          testID={`settings-row-${row.key}`}
           style={styles.row}
           onPress={() => navigation.navigate(row.screen)}
           activeOpacity={0.7}

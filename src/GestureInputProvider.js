@@ -561,7 +561,7 @@ export function GestureInputProvider({ children }) {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.eyebrow}>Gesture Input</Text>
                 </View>
-                <TouchableOpacity style={styles.closeButton} onPress={() => closeOverlay()}>
+                <TouchableOpacity testID="gesture-sheet-close" style={styles.closeButton} onPress={() => closeOverlay()}>
                   <Text style={styles.closeButtonText}>Close</Text>
                 </TouchableOpacity>
               </View>
@@ -588,22 +588,22 @@ export function GestureInputProvider({ children }) {
                   </View>
 
                   <View style={styles.actionGrid}>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={handleUndoGesture} disabled={!canUndo}>
+                    <TouchableOpacity testID="gesture-undo" style={styles.secondaryButton} onPress={handleUndoGesture} disabled={!canUndo}>
                       <Text style={[styles.secondaryButtonText, !canUndo && styles.buttonTextDisabled]}>Undo Gesture</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={handleInvertGesture} disabled={!lastInsertion}>
+                    <TouchableOpacity testID="gesture-invert" style={styles.secondaryButton} onPress={handleInvertGesture} disabled={!lastInsertion}>
                       <Text style={[styles.secondaryButtonText, !lastInsertion && styles.buttonTextDisabled]}>Invert Gesture</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={handleDictationPress}>
+                    <TouchableOpacity testID="gesture-dictation" style={styles.secondaryButton} onPress={handleDictationPress}>
                       <Text style={styles.secondaryButtonText}>{isDictating ? 'Stop Dictation' : 'Dictation'}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.primaryButton} onPress={switchToKeyboard}>
+                    <TouchableOpacity testID="gesture-use-keyboard" style={styles.primaryButton} onPress={switchToKeyboard}>
                       <Text style={styles.primaryButtonText}>Use Keyboard</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={clearResult}>
+                    <TouchableOpacity testID="gesture-clear-pad" style={styles.secondaryButton} onPress={clearResult}>
                       <Text style={styles.secondaryButtonText}>Clear Pad</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.primaryButton} onPress={() => closeOverlay()}>
+                    <TouchableOpacity testID="gesture-done" style={styles.primaryButton} onPress={() => closeOverlay()}>
                       <Text style={styles.primaryButtonText}>Done</Text>
                     </TouchableOpacity>
                   </View>

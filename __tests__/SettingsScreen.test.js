@@ -2,17 +2,18 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import SettingsScreen from '../src/SettingsScreen';
+import { makeNavigation } from './helpers/matrix';
 
 describe('SettingsScreen', () => {
-  test('navigates to manage gestures', () => {
-    const navigation = { navigate: jest.fn() };
+  test.each([
+    ['settings-row-clinic', 'ClinicProfile'],
+    ['settings-row-currency', 'CurrencySettings'],
+    ['settings-row-inputMode', 'InputModeSettings'],
+    ['settings-row-gestures', 'ManageGestures'],
+  ])('%s navigates to %s', (testID, route) => {
+    const navigation = makeNavigation();
     render(<SettingsScreen navigation={navigation} />);
-
-    fireEvent.press(screen.getByText('Currency'));
-    fireEvent.press(screen.getByText('Input Mode'));
-    fireEvent.press(screen.getByText('Manage Gestures'));
-    expect(navigation.navigate).toHaveBeenCalledWith('CurrencySettings');
-    expect(navigation.navigate).toHaveBeenCalledWith('InputModeSettings');
-    expect(navigation.navigate).toHaveBeenCalledWith('ManageGestures');
+    fireEvent.press(screen.getByTestId(testID));
+    expect(navigation.navigate).toHaveBeenCalledWith(route);
   });
 });

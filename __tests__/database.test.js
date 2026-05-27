@@ -630,6 +630,117 @@ describe('database', () => {
     expect(draft.paymentScope).toBe('patient');
   });
 
+  test('getAllPatients returns ordered patient rows', async () => {
+    const db = createMockDb();
+    db.getAllAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('FROM patients')) {
+        return [{ id: 1, first_name: 'Ann', middle_name: '', last_name: 'Lee', name: 'Ann Lee' }];
+      }
+      return [];
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const patients = await database.getAllPatients();
+    expect(patients).toEqual([{ id: 1, first_name: 'Ann', middle_name: '', last_name: 'Lee', name: 'Ann Lee' }]);
+  });
+
+  test('searchFamiliesByRelativeName returns matching families', async () => {
+    const db = createMockDb();
+    db.getAllAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('FROM ranked')) {
+        return [{ family_id: 3, relative_name: 'Ann Lee', member_count: 2 }];
+      }
+      return [];
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const families = await database.searchFamiliesByRelativeName('Lee');
+    expect(families).toEqual([{ family_id: 3, relative_name: 'Ann Lee', member_count: 2 }]);
+  });
+
+  test('getVisits and getVisitMedicines return visit data', async () => {
+    const db = createMockDb();
+    db.getAllAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('FROM visits')) {
+        return [{ id: 10, patient_id: 9, visit_date: '2026-05-01', visit_cost: 100 }];
+      }
+      if (sql.includes('FROM visit_medicines')) {
+        return [{ id: 1, visit_id: 10, name: 'Paracetamol' }];
+      }
+      return [];
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const visits = await database.getVisits(9);
+    const meds = await database.getVisitMedicines(10);
+    expect(visits).toHaveLength(1);
+    expect(meds).toHaveLength(1);
+  });
+
+  test('addVisit inserts visit, medicines, and optional payment', async () => {
+    const db = createMockDb();
+    let insertCount = 0;
+    db.runAsync.mockImplementation(async () => {
+      insertCount += 1;
+      return { lastInsertRowId: insertCount, changes: 1 };
+    });
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('SELECT id, family_id FROM patients')) {
+        return { id: 9, family_id: 2 };
+      }
+      return { total: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const visitId = await database.addVisit(9, {
+      familyId: 2,
+      visitDate: '2026-05-20',
+      complaints: 'Fever',
+      visitCost: 200,
+      paymentAmount: 50,
+      paymentScope: 'family',
+      medicines: [{ name: 'Ibuprofen', dosage: '400mg', intervalDays: 1 }],
+    });
+
+    expect(visitId).toBe(1);
+    expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO visits'), expect.any(Array));
+    expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO visit_medicines'), expect.any(Array));
+    expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO payments'), expect.any(Array));
+  });
+
+  test('addPayment skips zero amounts', async () => {
+    const db = createMockDb();
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const result = await database.addPayment(9, { familyId: 2, amount: 0 });
+    expect(result).toBeNull();
+    expect(db.runAsync).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO payments'), expect.any(Array));
+  });
+
+  test('getBalanceSummary computes patient and family balances', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('SELECT id, family_id FROM patients')) return { id: 9, family_id: 2 };
+      if (sql.includes('FROM visits WHERE patient_id')) return { total: 300 };
+      if (sql.includes("scope = 'patient'")) return { total: 100 };
+      if (sql.includes('p.family_id')) return { total: 500 };
+      if (sql.includes('payments WHERE family_id')) return { total: 150 };
+      return { total: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const summary = await database.getBalanceSummary(9);
+    expect(summary.patientBalance).toBe(200);
+    expect(summary.familyBalance).toBe(350);
+    expect(summary.totalVisitCostPatient).toBe(300);
+    expect(summary.totalPaymentsPatient).toBe(100);
+  });
+
   test('gesture helpers list, insert, and delete gestures', async () => {
     const db = createMockDb();
     db.getAllAsync.mockImplementation(async (sql) => {
