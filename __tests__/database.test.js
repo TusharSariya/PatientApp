@@ -62,7 +62,7 @@ describe('database', () => {
     const db = createMockDb();
     db.getFirstAsync.mockImplementation(async (sql) => {
       if (sql.includes('FROM app_settings')) {
-        return { id: 1, currency_code: 'INR' };
+        return { id: 1, currency_code: 'INR', default_input_mode: 'gestures' };
       }
       if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
       return { count: 0 };
@@ -70,12 +70,15 @@ describe('database', () => {
     const { database } = await loadDatabaseModule({ dev: false, db });
 
     const settings = await database.getAppSettings();
-    expect(settings).toEqual({ currencyCode: 'INR' });
+    expect(settings).toEqual({ currencyCode: 'INR', defaultInputMode: 'gestures' });
   });
 
-  test('saveAppSettings updates currency_code', async () => {
+  test('saveAppSettings updates currency_code and preserves input mode', async () => {
     const db = createMockDb();
     db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM app_settings')) {
+        return { id: 1, currency_code: 'INR', default_input_mode: 'voice' };
+      }
       if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
       return { count: 0 };
     });
@@ -83,11 +86,61 @@ describe('database', () => {
     const { database } = await loadDatabaseModule({ dev: false, db });
 
     const settings = await database.saveAppSettings({ currencyCode: 'USD' });
-    expect(settings).toEqual({ currencyCode: 'USD' });
+    expect(settings).toEqual({ currencyCode: 'USD', defaultInputMode: 'voice' });
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE app_settings'),
-      ['USD']
+      ['USD', 'voice']
     );
+  });
+
+  test('saveAppSettings updates input mode and preserves currency_code', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM app_settings')) {
+        return { id: 1, currency_code: 'USD', default_input_mode: 'gestures' };
+      }
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      return { count: 0 };
+    });
+    db.runAsync.mockResolvedValue({ changes: 1 });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const settings = await database.saveAppSettings({ defaultInputMode: 'keyboard' });
+
+    expect(settings).toEqual({ currencyCode: 'USD', defaultInputMode: 'keyboard' });
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE app_settings'),
+      ['USD', 'keyboard']
+    );
+  });
+
+  test('app settings normalize invalid input mode to gestures', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM app_settings')) {
+        return { id: 1, currency_code: 'USD', default_input_mode: 'unknown' };
+      }
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const settings = await database.getAppSettings();
+
+    expect(settings).toEqual({ currencyCode: 'USD', defaultInputMode: 'gestures' });
+  });
+
+  test('adds default input mode column for existing app settings tables', async () => {
+    const db = createMockDb();
+    db.getAllAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('PRAGMA table_info(app_settings)')) return [{ name: 'currency_code' }];
+      return [];
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+    await database.getDb();
+
+    expect(db.execAsync).toHaveBeenCalledWith("ALTER TABLE app_settings ADD COLUMN default_input_mode TEXT NOT NULL DEFAULT 'gestures';");
   });
 
   test('addPatient inserts patient and uses existing family id when provided', async () => {

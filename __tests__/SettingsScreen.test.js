@@ -9,8 +9,10 @@ describe('SettingsScreen', () => {
     render(<SettingsScreen navigation={navigation} />);
 
     fireEvent.press(screen.getByText('Currency'));
+    fireEvent.press(screen.getByText('Input Mode'));
     fireEvent.press(screen.getByText('Manage Gestures'));
     expect(navigation.navigate).toHaveBeenCalledWith('CurrencySettings');
+    expect(navigation.navigate).toHaveBeenCalledWith('InputModeSettings');
     expect(navigation.navigate).toHaveBeenCalledWith('ManageGestures');
   });
 });

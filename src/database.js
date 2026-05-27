@@ -1,8 +1,10 @@
 import * as SQLite from 'expo-sqlite';
 import { DEFAULT_CURRENCY_CODE, isValidCurrencyCode } from './currency';
+import { DEFAULT_INPUT_MODE, normalizeInputMode } from './inputMode';
 import { splitPatientName } from './patientName';
 
 let db;
+const appSettingsListeners = new Set();
 
 const MOCK_PATIENTS = [
   { firstName: 'Alice', middleName: 'Marie', lastName: 'Johnson', dob: '1990-02-14', phone: '555-101-2020', address: '12 Maple Ave, Springfield, IL' },
@@ -270,10 +272,16 @@ async function ensureAppSettingsSchema(database) {
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      currency_code TEXT NOT NULL DEFAULT 'INR'
+      currency_code TEXT NOT NULL DEFAULT 'INR',
+      default_input_mode TEXT NOT NULL DEFAULT 'gestures'
     );
-    INSERT OR IGNORE INTO app_settings (id, currency_code) VALUES (1, 'INR');
+    INSERT OR IGNORE INTO app_settings (id, currency_code, default_input_mode) VALUES (1, 'INR', 'gestures');
   `);
+  const columns = await database.getAllAsync('PRAGMA table_info(app_settings)');
+  const names = new Set(columns.map(column => column.name));
+  if (!names.has('default_input_mode')) {
+    await database.execAsync(`ALTER TABLE app_settings ADD COLUMN default_input_mode TEXT NOT NULL DEFAULT '${DEFAULT_INPUT_MODE}';`);
+  }
 }
 
 async function ensureVisitColumns(database) {
@@ -1226,6 +1234,7 @@ export function mapAppSettingsRow(row) {
   const code = row?.currency_code ?? DEFAULT_CURRENCY_CODE;
   return {
     currencyCode: isValidCurrencyCode(code) ? code : DEFAULT_CURRENCY_CODE,
+    defaultInputMode: normalizeInputMode(row?.default_input_mode),
   };
 }
 
@@ -1235,11 +1244,38 @@ export async function getAppSettings() {
   return mapAppSettingsRow(row);
 }
 
-export async function saveAppSettings({ currencyCode }) {
+export function subscribeAppSettings(listener) {
+  appSettingsListeners.add(listener);
+  return () => {
+    appSettingsListeners.delete(listener);
+  };
+}
+
+function notifyAppSettings(settings) {
+  appSettingsListeners.forEach((listener) => {
+    listener(settings);
+  });
+}
+
+export async function saveAppSettings({ currencyCode, defaultInputMode } = {}) {
   const database = await getDb();
-  const normalized = isValidCurrencyCode(currencyCode) ? currencyCode : DEFAULT_CURRENCY_CODE;
-  await database.runAsync('UPDATE app_settings SET currency_code = ? WHERE id = 1', [normalized]);
-  return mapAppSettingsRow({ currency_code: normalized });
+  const current = await getAppSettings();
+  const normalizedCurrency = currencyCode == null
+    ? current.currencyCode
+    : isValidCurrencyCode(currencyCode) ? currencyCode : DEFAULT_CURRENCY_CODE;
+  const normalizedInputMode = defaultInputMode == null
+    ? current.defaultInputMode
+    : normalizeInputMode(defaultInputMode);
+  await database.runAsync(
+    'UPDATE app_settings SET currency_code = ?, default_input_mode = ? WHERE id = 1',
+    [normalizedCurrency, normalizedInputMode]
+  );
+  const settings = mapAppSettingsRow({
+    currency_code: normalizedCurrency,
+    default_input_mode: normalizedInputMode,
+  });
+  notifyAppSettings(settings);
+  return settings;
 }
 
 export async function saveClinicProfile({

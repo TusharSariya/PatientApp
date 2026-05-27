@@ -17,6 +17,13 @@ const ROWS = [
     screen: 'CurrencySettings',
   },
   {
+    key: 'inputMode',
+    icon: '⌨',
+    title: 'Input Mode',
+    sub: 'Choose keyboard, voice, or gestures',
+    screen: 'InputModeSettings',
+  },
+  {
     key: 'gestures',
     icon: '👋',
     title: 'Manage Gestures',

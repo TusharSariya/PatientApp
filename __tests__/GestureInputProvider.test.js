@@ -6,7 +6,7 @@ import {
   GestureInputProvider,
   useGestureTextInput,
 } from '../src/GestureInputProvider';
-import { getGestures } from '../src/database';
+import { getAppSettings, getGestures, subscribeAppSettings } from '../src/database';
 import { isTouchGestureData, matchGesture } from '../src/gestureRecognizer';
 import {
   ExpoSpeechRecognitionModule,
@@ -15,7 +15,9 @@ import {
 import { clearDictationOwner } from '../src/dictationOwner';
 
 jest.mock('../src/database', () => ({
+  getAppSettings: jest.fn(),
   getGestures: jest.fn(),
+  subscribeAppSettings: jest.fn(),
 }));
 
 jest.mock('../src/gestureRecognizer', () => ({
@@ -119,6 +121,7 @@ describe('GestureInputProvider', () => {
       delete speechHandlers[key];
     });
 
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR', defaultInputMode: 'gestures' });
     getGestures.mockResolvedValue([
       { id: 1, word: 'cold', data: 'cold-gesture' },
       { id: 2, word: 'fever', data: 'fever-gesture' },
@@ -133,6 +136,7 @@ describe('GestureInputProvider', () => {
       speechHandlers[eventName] = handler;
     });
     ExpoSpeechRecognitionModule.requestPermissionsAsync.mockResolvedValue({ granted: true });
+    subscribeAppSettings.mockReturnValue(jest.fn());
   });
 
   function renderHarness(initialValue) {
@@ -155,6 +159,55 @@ describe('GestureInputProvider', () => {
     expect(getGestures).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Live Field Preview')).toBeTruthy();
     expect(screen.getAllByText('Symptoms').length).toBeGreaterThan(0);
+  });
+
+  test('gesture default opens sheet when field is focused', async () => {
+    renderHarness('Symptoms');
+
+    fireEvent(screen.getByTestId('notes-input'), 'focus');
+
+    await waitFor(() => {
+      expect(screen.getByText('Gesture Input')).toBeTruthy();
+    });
+  });
+
+  test('keyboard default focuses field without opening sheet', async () => {
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR', defaultInputMode: 'keyboard' });
+    renderHarness('Symptoms');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-input').props.showSoftInputOnFocus).toBe(true);
+    });
+
+    fireEvent(screen.getByTestId('notes-input'), 'focus');
+
+    expect(screen.queryByText('Gesture Input')).toBeNull();
+  });
+
+  test('voice default opens sheet and starts dictation when field is focused', async () => {
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR', defaultInputMode: 'voice' });
+    renderHarness('Symptoms');
+
+    await waitFor(() => {
+      expect(getAppSettings).toHaveBeenCalled();
+    });
+    fireEvent(screen.getByTestId('notes-input'), 'focus');
+
+    await waitFor(() => {
+      expect(screen.getByText('Gesture Input')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledWith({ lang: 'en-US', interimResults: true });
+    });
+  });
+
+  test('manual gesture open still works in keyboard mode', async () => {
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR', defaultInputMode: 'keyboard' });
+    renderHarness('Symptoms');
+
+    await openGestureSheet();
+
+    expect(screen.getByText('Gesture Input')).toBeTruthy();
   });
 
   test('closes gesture sheet on swipe down', async () => {

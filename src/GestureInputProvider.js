@@ -15,10 +15,11 @@ import {
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 
-import { getGestures } from './database';
+import { getAppSettings, getGestures, subscribeAppSettings } from './database';
 import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import GesturePad from './GesturePad';
 import { isTouchGestureData, matchGesture } from './gestureRecognizer';
+import { DEFAULT_INPUT_MODE } from './inputMode';
 
 const GestureInputContext = createContext(null);
 
@@ -125,6 +126,7 @@ export function GestureInputProvider({ children }) {
   const [lastInsertion, setLastInsertion] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
+  const [defaultInputMode, setDefaultInputMode] = useState(DEFAULT_INPUT_MODE);
 
   const activeFieldRef = useRef(null);
   const overlayVisibleRef = useRef(false);
@@ -152,6 +154,22 @@ export function GestureInputProvider({ children }) {
   useEffect(() => {
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getAppSettings()
+      .then((settings) => {
+        if (active) setDefaultInputMode(settings.defaultInputMode);
+      })
+      .catch(() => {});
+    const unsubscribe = subscribeAppSettings((settings) => {
+      setDefaultInputMode(settings.defaultInputMode);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
     };
   }, []);
 
@@ -235,7 +253,7 @@ export function GestureInputProvider({ children }) {
     }
   }
 
-  function openFieldOverlay(field) {
+  function openFieldOverlay(field, { autoStartDictation = false } = {}) {
     if (!field) return;
     clearBlurTimer();
     activeFieldRef.current = field;
@@ -249,6 +267,9 @@ export function GestureInputProvider({ children }) {
     sheetTranslateY.setValue(0);
     setOverlayVisible(true);
     Keyboard.dismiss();
+    if (autoStartDictation) {
+      handleDictationPress();
+    }
   }
 
   function resetOverlayState() {
@@ -512,7 +533,7 @@ export function GestureInputProvider({ children }) {
   const hasGestures = gestures.length > 0;
 
   return (
-    <GestureInputContext.Provider value={{ focusField, blurField, releaseField, openFieldOverlay }}>
+    <GestureInputContext.Provider value={{ focusField, blurField, releaseField, openFieldOverlay, defaultInputMode }}>
       <View style={styles.root}>
         {children}
 
@@ -607,6 +628,7 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
   const [showSoftInputOnFocus, setShowSoftInputOnFocus] = useState(false);
   const [selection, setSelection] = useState(getDefaultSelection(value ?? ''));
   const selectionRef = useRef(selection);
+  const defaultInputMode = context?.defaultInputMode ?? DEFAULT_INPUT_MODE;
   const controllerRef = useRef({
     id: fieldIdRef.current,
     label,
@@ -653,10 +675,16 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
     const focusMode = focusModeRef.current;
     focusModeRef.current = 'gesture';
     if (focusMode === 'keyboard') {
-      setShowSoftInputOnFocus(false);
+      setShowSoftInputOnFocus(defaultInputMode === 'keyboard');
       return event;
     }
-    context?.openFieldOverlay?.(controllerRef.current);
+    if (defaultInputMode === 'keyboard') {
+      setShowSoftInputOnFocus(true);
+      return event;
+    }
+    context?.openFieldOverlay?.(controllerRef.current, {
+      autoStartDictation: defaultInputMode === 'voice',
+    });
     return event;
   }
 
@@ -681,7 +709,7 @@ export function useGestureTextInput({ label, value, setValue, inputRef }) {
     ref: resolvedRef,
     selection,
     setSelection: handleSetSelection,
-    showSoftInputOnFocus,
+    showSoftInputOnFocus: defaultInputMode === 'keyboard' || showSoftInputOnFocus,
     onFocus: handleFocus,
     onBlur: handleBlur,
     onSelectionChange: handleSelectionChange,
