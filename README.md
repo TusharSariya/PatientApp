@@ -222,6 +222,20 @@ npx jest __tests__/GestureInputProvider.test.js
 
 You can replace the file path with any test file in `__tests__/`.
 
+### Git hooks and CI
+
+A **pre-push** hook (via [Husky](https://typicode.github.io/husky/)) runs `npm test` before every `git push`. Hooks are installed automatically when you run `npm install`.
+
+GitHub Actions runs the same test suite on every push to `main` and on all pull requests (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+To bypass the local hook in an emergency:
+
+```bash
+git push --no-verify
+```
+
+Consider enabling branch protection on `main` in your GitHub repo settings so merges require the CI check to pass.
+
 ### Interaction test matrix
 
 The suite includes an **interaction matrix** (~229 tests) that covers:
