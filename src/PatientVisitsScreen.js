@@ -612,14 +612,6 @@ export default function PatientVisitsScreen({ route, navigation }) {
         <View style={styles.patientCard}>
           <Text style={styles.patientName}>{patient.name}</Text>
           <Text style={styles.patientDetail}>Visits and encounter history</Text>
-          <View style={styles.balanceRow}>
-            <Text style={styles.balanceLabel}>Patient Balance:</Text>
-            <Text style={styles.balanceValue}>{formatMoney(balances.patientBalance, currencyCode)}</Text>
-          </View>
-          <View style={styles.balanceRow}>
-            <Text style={styles.balanceLabel}>Family Balance:</Text>
-            <Text style={styles.balanceValue}>{formatMoney(balances.familyBalance, currencyCode)}</Text>
-          </View>
         </View>
 
         <View style={styles.formCard}>
@@ -652,33 +644,6 @@ export default function PatientVisitsScreen({ route, navigation }) {
             value={complaints}
             onChangeText={setComplaints}
             placeholder="Chief complaints"
-            placeholderTextColor="#bbb"
-            multiline
-          />
-          <Text style={styles.label}>Diagnosis</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={diagnosis}
-            onChangeText={setDiagnosis}
-            placeholder="Diagnosis"
-            placeholderTextColor="#bbb"
-            multiline
-          />
-          <Text style={styles.label}>Investigations</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={investigations}
-            onChangeText={setInvestigations}
-            placeholder="Investigations"
-            placeholderTextColor="#bbb"
-            multiline
-          />
-          <Text style={styles.label}>Procedures</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={procedures}
-            onChangeText={setProcedures}
-            placeholder="Procedures"
             placeholderTextColor="#bbb"
             multiline
           />
@@ -721,6 +686,33 @@ export default function PatientVisitsScreen({ route, navigation }) {
               ))}
             </View>
           </View>
+          <Text style={styles.label}>Investigations</Text>
+          <TextInput
+            style={[styles.input, styles.multiline]}
+            value={investigations}
+            onChangeText={setInvestigations}
+            placeholder="Investigations"
+            placeholderTextColor="#bbb"
+            multiline
+          />
+          <Text style={styles.label}>Procedures</Text>
+          <TextInput
+            style={[styles.input, styles.multiline]}
+            value={procedures}
+            onChangeText={setProcedures}
+            placeholder="Procedures"
+            placeholderTextColor="#bbb"
+            multiline
+          />
+          <Text style={styles.label}>Diagnosis</Text>
+          <TextInput
+            style={[styles.input, styles.multiline]}
+            value={diagnosis}
+            onChangeText={setDiagnosis}
+            placeholder="Diagnosis"
+            placeholderTextColor="#bbb"
+            multiline
+          />
         </View>
 
         {renderMedicineSection()}
@@ -737,13 +729,24 @@ export default function PatientVisitsScreen({ route, navigation }) {
           />
           <Text style={styles.label}>Visit Cost</Text>
           <TextInput
-            style={styles.input}
+            testID="visit-cost-input"
+            style={[styles.input, styles.costInput]}
             value={visitCost}
             onChangeText={setVisitCost}
-            placeholder="e.g. 150"
+            placeholder="0"
             placeholderTextColor="#bbb"
             keyboardType="decimal-pad"
           />
+          <View style={styles.balanceBox} testID="visit-balance-box">
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>Patient Balance</Text>
+              <Text style={styles.balanceValue}>{formatMoney(balances.patientBalance, currencyCode)}</Text>
+            </View>
+            <View style={[styles.balanceRow, styles.balanceRowLast]}>
+              <Text style={styles.balanceLabel}>Family Balance</Text>
+              <Text style={styles.balanceValue}>{formatMoney(balances.familyBalance, currencyCode)}</Text>
+            </View>
+          </View>
           <Text style={styles.label}>Payment Amount</Text>
           <TextInput
             style={styles.input}
@@ -846,7 +849,27 @@ const styles = StyleSheet.create({
   balanceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  balanceRowLast: {
+    borderBottomWidth: 0,
+  },
+  balanceBox: {
+    marginTop: 4,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: screenColors.tint,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: screenColors.border,
+  },
+  costInput: {
+    alignSelf: 'flex-start',
+    minWidth: 120,
+    maxWidth: 160,
+    paddingVertical: 10,
   },
   balanceLabel: {
     color: '#5f6d8a',

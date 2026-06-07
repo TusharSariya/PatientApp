@@ -105,7 +105,7 @@ describe('PatientVisitsScreen', () => {
     expect(screen.queryByText('Ibuprofen')).toBeNull();
   });
 
-  test('places medicine section after weight and before notes in the new visit form', async () => {
+  test('orders new visit fields as complaints, findings, vitals, workup, diagnosis, medicines, notes, payment', async () => {
     const { toJSON } = render(<PatientVisitsScreen route={{ params: { patient } }} />);
 
     await waitFor(() => {
@@ -113,15 +113,25 @@ describe('PatientVisitsScreen', () => {
     });
 
     const renderedText = collectRenderedText(toJSON());
-    const medicineIndex = renderedText.indexOf('Medicines');
+    const complaintsIndex = renderedText.indexOf('Complaints');
+    const findingsIndex = renderedText.indexOf('Findings');
     const weightIndex = renderedText.indexOf('Weight');
+    const investigationsIndex = renderedText.indexOf('Investigations');
+    const proceduresIndex = renderedText.indexOf('Procedures');
+    const diagnosisIndex = renderedText.indexOf('Diagnosis');
+    const medicineIndex = renderedText.indexOf('Medicines');
     const notesIndex = renderedText.indexOf('Notes');
+    const visitCostIndex = renderedText.indexOf('Visit Cost');
 
-    expect(medicineIndex).toBeGreaterThan(-1);
-    expect(weightIndex).toBeGreaterThan(-1);
-    expect(notesIndex).toBeGreaterThan(-1);
-    expect(weightIndex).toBeLessThan(medicineIndex);
+    expect(complaintsIndex).toBeLessThan(findingsIndex);
+    expect(findingsIndex).toBeLessThan(weightIndex);
+    expect(weightIndex).toBeLessThan(investigationsIndex);
+    expect(investigationsIndex).toBeLessThan(proceduresIndex);
+    expect(proceduresIndex).toBeLessThan(diagnosisIndex);
+    expect(diagnosisIndex).toBeLessThan(medicineIndex);
     expect(medicineIndex).toBeLessThan(notesIndex);
+    expect(notesIndex).toBeLessThan(visitCostIndex);
+    expect(screen.getByTestId('visit-balance-box')).toBeTruthy();
   });
 
   test('shows empty state when patient has no current medicines', async () => {
@@ -399,7 +409,7 @@ describe('PatientVisitsScreen', () => {
 
     fireEvent.press(screen.getByTestId('payment-scope-family'));
     fireEvent.changeText(screen.getByPlaceholderText('Chief complaints'), 'Cough');
-    fireEvent.changeText(screen.getByPlaceholderText('e.g. 150'), '200');
+    fireEvent.changeText(screen.getByTestId('visit-cost-input'), '200');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. 50'), '75');
     fireEvent.press(screen.getByTestId('create-visit-button'));
 
