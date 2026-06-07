@@ -43,7 +43,8 @@
           "microphonePermission": "Allow PatientApp to use your microphone for dictation.",
           "speechRecognitionPermission": "Allow PatientApp to recognize your speech for dictation."
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "extra": {
       "eas": {

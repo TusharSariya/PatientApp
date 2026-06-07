@@ -17,6 +17,7 @@ import {
   startOfMonthIsoDate,
   todayIsoDate,
 } from './visitDates';
+import { flatPressableRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 function visitToPatient(row) {
   return {
@@ -32,9 +33,13 @@ function visitToPatient(row) {
   };
 }
 
-function VisitCard({ visit, currencyCode, onPress }) {
+function VisitCard({ visit, currencyCode, onPress, last }) {
   return (
-    <TouchableOpacity style={styles.visitRow} onPress={onPress} activeOpacity={0.75}>
+    <TouchableOpacity
+      style={flatPressableRow({ last })}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
       <Text style={styles.patientName} numberOfLines={1}>
         {visit.patient_name}
       </Text>
@@ -89,7 +94,7 @@ export default function AllVisitsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.filterCard}>
+      <View style={styles.filterSection}>
         <Text style={styles.sectionTitle}>Date range</Text>
         <Text style={styles.label}>Start date</Text>
         <TextInput
@@ -148,10 +153,11 @@ export default function AllVisitsScreen({ navigation }) {
               <Text style={styles.dateHeaderText}>{section.title}</Text>
             </View>
           )}
-          renderItem={({ item }) => (
+          renderItem={({ item, index, section }) => (
             <VisitCard
               visit={item}
               currencyCode={currencyCode}
+              last={index === section.data.length - 1}
               onPress={() => navigation.navigate('PatientVisits', { patient: visitToPatient(item) })}
             />
           )}
@@ -164,19 +170,13 @@ export default function AllVisitsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
-  filterCard: {
-    backgroundColor: '#fff',
-    margin: 16,
-    marginBottom: 8,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+  filterSection: {
+    ...flatSection({ marginBottom: 0 }),
+    ...screenContent(0),
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
@@ -192,8 +192,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   input: {
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
@@ -201,7 +203,7 @@ const styles = StyleSheet.create({
   },
   searchButton: {
     backgroundColor: '#4f6ef7',
-    borderRadius: 12,
+    borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 16,
@@ -218,8 +220,8 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
+    ...screenContent(32),
+    paddingTop: 0,
   },
   resultCount: {
     fontSize: 14,
@@ -228,7 +230,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dateHeader: {
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
     paddingTop: 14,
     paddingBottom: 6,
   },
@@ -244,16 +246,6 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 15,
     marginTop: 24,
-  },
-  visitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 6,
   },
   patientName: {
     flex: 1,

@@ -13,6 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import GesturePad from './GesturePad';
 import { getGestures } from './database';
 import { isTouchGestureData, matchGesture } from './gestureRecognizer';
+import { flatSection, screenColors, screenContent } from './screenLayout';
 
 export default function TestGestureScreen() {
   const [gestures, setGestures] = useState([]);
@@ -165,15 +166,14 @@ export default function TestGestureScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    ...screenContent(40),
     flexGrow: 1,
-    padding: 20,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
   heroCard: {
+    ...flatSection({ marginBottom: 12, paddingVertical: 16 }),
     backgroundColor: '#4f6ef7',
-    borderRadius: 20,
-    padding: 22,
-    marginBottom: 18,
+    borderColor: '#4f6ef7',
   },
   heroEyebrow: {
     fontSize: 12,
@@ -195,16 +195,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: 'rgba(255,255,255,0.82)',
   },
-  panel: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
+  panel: flatSection({ paddingVertical: 16 }),
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -216,13 +207,15 @@ const styles = StyleSheet.create({
   },
   resultPanel: {
     alignItems: 'center',
-    borderRadius: 14,
     paddingVertical: 24,
     paddingHorizontal: 16,
     marginTop: 16,
     minHeight: 128,
     justifyContent: 'center',
-    backgroundColor: '#f3f5fb',
+    backgroundColor: screenColors.tint,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: screenColors.border,
   },
   resultLabel: {
     fontSize: 13,

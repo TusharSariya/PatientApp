@@ -20,6 +20,7 @@ import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dic
 import GesturePad from './GesturePad';
 import { isTouchGestureData, matchGesture } from './gestureRecognizer';
 import { DEFAULT_INPUT_MODE } from './inputMode';
+import { SCREEN_PADDING, screenColors } from './screenLayout';
 
 const GestureInputContext = createContext(null);
 
@@ -727,8 +728,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     flex: 1,
-    backgroundColor: '#fff',
-    paddingHorizontal: 24,
+    backgroundColor: screenColors.surface,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
@@ -775,10 +776,10 @@ const styles = StyleSheet.create({
     marginVertical: 48,
   },
   previewPanel: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dce3ff',
-    backgroundColor: '#f7f9ff',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: screenColors.border,
+    backgroundColor: screenColors.tint,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 14,

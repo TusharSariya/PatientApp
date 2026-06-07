@@ -23,10 +23,12 @@ import {
   saveDraftVisit,
 } from './database';
 import { buildPrescriptionHtml } from './prescriptionHtml';
+import { showErrorAlert } from './errorAlerts';
 import { sharePrescriptionPdf } from './prescriptionPdf';
 import MedicationFrequencyField from './MedicationFrequencyField';
 import IntervalDaysStepper from './IntervalDaysStepper';
 import { formatMedicineSubtitle, medicineToDraftForm } from './medicineDisplay';
+import { flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 const EMPTY_MED = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
@@ -67,7 +69,7 @@ function hasMedicineDraftContent(med) {
   );
 }
 
-export default function PatientVisitsScreen({ route }) {
+export default function PatientVisitsScreen({ route, navigation }) {
   const { patient } = route.params;
   const [visits, setVisits] = useState([]);
   const [visitMedicines, setVisitMedicines] = useState({});
@@ -325,8 +327,12 @@ export default function PatientVisitsScreen({ route }) {
         skipAutosaveRef.current = false;
       }, 0);
       await loadVisits();
-    } catch {
-      Alert.alert('Error', 'Failed to create visit.');
+    } catch (error) {
+      showErrorAlert(navigation, {
+        message: 'Failed to create visit.',
+        screen: 'PatientVisits',
+        error,
+      });
     } finally {
       setSaving(false);
     }
@@ -452,10 +458,12 @@ export default function PatientVisitsScreen({ route }) {
     return (
       <View
         testID="visit-medicine-section"
+        style={styles.medicineSection}
         onLayout={(event) => {
           medicineSectionYRef.current = event.nativeEvent.layout.y;
         }}
       >
+        <Text style={styles.medicineSectionTitle}>Medicines</Text>
         <Text style={styles.label}>Interval Between Days</Text>
         <IntervalDaysStepper
           value={draftMed.intervalDays}
@@ -501,7 +509,7 @@ export default function PatientVisitsScreen({ route }) {
           </>
         ) : null}
 
-        <Text style={[styles.sectionTitleInline, { marginTop: 20 }]}>Prescribe Medicines</Text>
+        <Text style={styles.medicineSectionSubheading}>Add prescription</Text>
         <TextInput
           style={styles.input}
           value={draftMed.name}
@@ -638,7 +646,6 @@ export default function PatientVisitsScreen({ route }) {
             placeholder="YYYY-MM-DD"
             placeholderTextColor="#bbb"
           />
-          {renderMedicineSection()}
           <Text style={styles.label}>Complaints</Text>
           <TextInput
             style={[styles.input, styles.multiline]}
@@ -714,7 +721,12 @@ export default function PatientVisitsScreen({ route }) {
               ))}
             </View>
           </View>
-          <Text style={styles.label}>Notes</Text>
+        </View>
+
+        {renderMedicineSection()}
+
+        <View style={styles.formCard}>
+          <Text style={[styles.label, styles.formCardFirstLabel]}>Notes</Text>
           <TextInput
             style={[styles.input, styles.multiline]}
             value={notes}
@@ -817,18 +829,10 @@ export default function PatientVisitsScreen({ route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
-  content: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  patientCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-  },
+  content: screenContent(40),
+  patientCard: flatSection({ marginBottom: 12, paddingVertical: 16 }),
   patientName: {
     fontSize: 22,
     fontWeight: '800',
@@ -854,13 +858,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  formCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dce2f7',
-    padding: 16,
-  },
+  formCard: flatSection(),
   formHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -902,17 +900,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a2e',
   },
+  medicineSection: flatSection({ tinted: true, paddingVertical: 8 }),
+  medicineSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2f46c7',
+    marginBottom: 4,
+  },
+  medicineSectionSubheading: {
+    marginTop: 12,
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
   currentMedsToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#e9eeff',
-    borderRadius: 10,
-    borderWidth: 1,
+    backgroundColor: '#f7f9ff',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: '#dce2f7',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 16,
+    paddingVertical: 10,
+    marginTop: 8,
     marginBottom: 4,
   },
   currentMedsToggleTitle: {
@@ -937,14 +948,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   currentMedRow: {
+    ...flatRow(),
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f7f9ff',
-    borderWidth: 1,
-    borderColor: '#dce2f7',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
     gap: 8,
   },
   currentMedName: {
@@ -968,6 +974,9 @@ const styles = StyleSheet.create({
     color: '#555',
     marginTop: 12,
     marginBottom: 6,
+  },
+  formCardFirstLabel: {
+    marginTop: 0,
   },
   input: {
     backgroundColor: '#fff',
@@ -1054,13 +1063,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   prescribedRow: {
+    ...flatRow(),
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#f3f6ff',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 6,
   },
   prescribedInfo: {
     flex: 1,
@@ -1123,12 +1128,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   visitCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e8ebf5',
-    padding: 14,
-    marginBottom: 10,
+    ...flatSection({ paddingVertical: 12 }),
+    borderBottomWidth: 0,
   },
   visitDate: {
     fontSize: 15,

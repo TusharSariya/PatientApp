@@ -85,8 +85,7 @@ describe('PatientDetailScreen', () => {
 
     render(<PatientDetailScreen route={{ params: { patient } }} navigation={navigation} />);
 
-    const openButtons = screen.getAllByText('Open');
-    fireEvent.press(openButtons[openButtons.length - 1]);
+    fireEvent.press(screen.getByTestId('patient-medicines-card'));
 
     expect(navigation.navigate).toHaveBeenCalledWith('PatientMedicines', { patient });
   });

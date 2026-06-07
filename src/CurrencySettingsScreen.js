@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { formatMoney, getCurrencyOption, SUPPORTED_CURRENCIES } from './currency';
 import { getAppSettings, saveAppSettings } from './database';
+import { flatPressableRow, flatSection, flatSelectedRow, screenColors, screenContent } from './screenLayout';
 
 export default function CurrencySettingsScreen() {
   const [loading, setLoading] = useState(true);
@@ -53,48 +55,53 @@ export default function CurrencySettingsScreen() {
   const sample = formatMoney(150, currencyCode);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.intro}>
         Amounts on prescriptions and visit screens use this currency.
       </Text>
       <Text style={styles.sampleLabel}>Preview</Text>
       <Text style={styles.sampleValue}>{sample}</Text>
-      {SUPPORTED_CURRENCIES.map((currency) => {
-        const selected = currency.code === currencyCode;
-        const option = getCurrencyOption(currency.code);
-        return (
-          <TouchableOpacity
-            key={currency.code}
-            style={[styles.row, selected && styles.rowSelected]}
-            onPress={() => handleSelect(currency.code)}
-            disabled={saving}
-            testID={`currency-option-${currency.code}`}
-          >
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>{currency.label}</Text>
-              <Text style={styles.rowSub}>
-                {currency.code} · {option.symbol} · {formatMoney(99, currency.code)}
-              </Text>
-            </View>
-            <Text style={[styles.check, selected && styles.checkSelected]}>{selected ? '✓' : ''}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+      <View style={styles.optionsSection}>
+        {SUPPORTED_CURRENCIES.map((currency, index) => {
+          const selected = currency.code === currencyCode;
+          const option = getCurrencyOption(currency.code);
+          return (
+            <TouchableOpacity
+              key={currency.code}
+              style={[
+                flatPressableRow({ last: index === SUPPORTED_CURRENCIES.length - 1 }),
+                flatSelectedRow(selected),
+              ]}
+              onPress={() => handleSelect(currency.code)}
+              disabled={saving}
+              testID={`currency-option-${currency.code}`}
+            >
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>{currency.label}</Text>
+                <Text style={styles.rowSub}>
+                  {currency.code} · {option.symbol} · {formatMoney(99, currency.code)}
+                </Text>
+              </View>
+              <Text style={[styles.check, selected && styles.checkSelected]}>{selected ? '✓' : ''}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
-    padding: 20,
+    backgroundColor: screenColors.bg,
   },
+  content: screenContent(40),
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
   intro: {
     fontSize: 14,
@@ -116,20 +123,7 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
     marginBottom: 20,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  rowSelected: {
-    borderColor: '#4f6ef7',
-    backgroundColor: '#f3f6ff',
-  },
+  optionsSection: flatSection(),
   rowText: {
     flex: 1,
   },

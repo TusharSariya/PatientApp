@@ -23,6 +23,7 @@ import { useGestureTextInput } from './GestureInputProvider';
 import MedicationFrequencyField from './MedicationFrequencyField';
 import IntervalDaysStepper from './IntervalDaysStepper';
 import { formatMedicineSubtitle } from './medicineDisplay';
+import { flatPressableRow, flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
 const EMPTY_FORM = { name: '', dosage: '', frequency: '', intervalDays: 1, duration: '', route: 'Oral', instructions: '' };
@@ -73,10 +74,10 @@ const sheet = StyleSheet.create({
   },
 });
 
-function MedicineCard({ medicine, onPress }) {
+function MedicineCard({ medicine, onPress, last }) {
   const sub = formatMedicineSubtitle(medicine);
   return (
-    <TouchableOpacity style={styles.medCard} onPress={onPress} activeOpacity={0.75}>
+    <TouchableOpacity style={flatPressableRow({ last })} onPress={onPress} activeOpacity={0.75}>
       <View style={{ flex: 1 }}>
         <Text style={styles.medName}>{medicine.name}</Text>
         {sub ? <Text style={styles.medSub}>{sub}</Text> : null}
@@ -184,47 +185,55 @@ export default function PatientMedicinesScreen({ route }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.patientCard}>
+        <View style={styles.patientSection}>
           <Text style={styles.patientName}>{patient.name}</Text>
           {patient.family_id ? <Text style={styles.patientDetail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
           <Text style={styles.patientDetail}>📞 {patient.phone}</Text>
           <Text style={styles.patientDetail}>📍 {patient.address}</Text>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Current Medicines</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
-            <Text style={styles.addButtonText}>+ Add</Text>
-          </TouchableOpacity>
+        <View style={styles.medicinesSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Current Medicines</Text>
+            <TouchableOpacity style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
+              <Text style={styles.addButtonText}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <ActivityIndicator style={{ marginVertical: 36 }} size="large" color="#4f6ef7" />
+          ) : medicines.length === 0 ? (
+            <Text style={styles.empty}>No active medicines.</Text>
+          ) : (
+            medicines.map((med, index) => (
+              <MedicineCard
+                key={med.id}
+                medicine={med}
+                last={index === medicines.length - 1}
+                onPress={() => setDetailSheet({ visible: true, med })}
+              />
+            ))
+          )}
         </View>
 
-        {loading ? (
-          <ActivityIndicator style={{ marginVertical: 36 }} size="large" color="#4f6ef7" />
-        ) : medicines.length === 0 ? (
-          <Text style={styles.empty}>No active medicines.</Text>
-        ) : (
-          medicines.map((med) => (
-            <MedicineCard
-              key={med.id}
-              medicine={med}
-              onPress={() => setDetailSheet({ visible: true, med })}
-            />
-          ))
-        )}
-
-        <View style={styles.historyHeader}>
-          <Text style={styles.sectionTitle}>Medicine History</Text>
+        <View style={styles.historySection}>
+          <View style={styles.historyHeader}>
+            <Text style={styles.sectionTitle}>Medicine History</Text>
+          </View>
+          {history.length === 0 ? (
+            <Text style={styles.empty}>No history yet.</Text>
+          ) : (
+            history.map((item, index) => (
+              <View
+                key={item.id}
+                style={[styles.historyRow, index === history.length - 1 && styles.historyRowLast]}
+              >
+                <Text style={styles.historyAction}>{buildHistoryLine(item)}</Text>
+                <Text style={styles.historyTime}>{formatHistoryTimestamp(item.created_at)}</Text>
+              </View>
+            ))
+          )}
         </View>
-        {history.length === 0 ? (
-          <Text style={styles.empty}>No history yet.</Text>
-        ) : (
-          history.map((item) => (
-            <View key={item.id} style={styles.historyRow}>
-              <Text style={styles.historyAction}>{buildHistoryLine(item)}</Text>
-              <Text style={styles.historyTime}>{formatHistoryTimestamp(item.created_at)}</Text>
-            </View>
-          ))
-        )}
       </ScrollView>
 
       <BottomSheet
@@ -373,23 +382,12 @@ export default function PatientMedicinesScreen({ route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
-  content: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  patientCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
+  content: screenContent(40),
+  patientSection: flatSection({ marginBottom: 12, paddingVertical: 16 }),
+  medicinesSection: flatSection({ marginBottom: 12 }),
+  historySection: flatSection(),
   patientName: {
     fontSize: 22,
     fontWeight: '800',
@@ -405,11 +403,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   historyHeader: {
-    marginTop: 28,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 16,
@@ -426,17 +423,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-  },
-  medCard: {
-    backgroundColor: '#f8f9ff',
-    borderWidth: 1,
-    borderColor: '#e0e4ff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   medName: {
     fontSize: 16,
@@ -459,13 +445,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   historyRow: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e8ebf5',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+    ...flatRow(),
+  },
+  historyRowLast: {
+    borderBottomWidth: 0,
   },
   historyAction: {
     color: '#1a1a2e',

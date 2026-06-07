@@ -13,8 +13,10 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getClinicProfile, saveClinicProfile } from './database';
+import { showErrorAlert } from './errorAlerts';
+import { flatSection, screenColors, screenContent } from './screenLayout';
 
-export default function ClinicProfileScreen() {
+export default function ClinicProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [doctorName, setDoctorName] = useState('');
@@ -57,8 +59,12 @@ export default function ClinicProfileScreen() {
         hours: hours.trim(),
       });
       Alert.alert('Saved', 'These details will appear at the top of prescription PDFs.');
-    } catch {
-      Alert.alert('Error', 'Could not save your details.');
+    } catch (error) {
+      showErrorAlert(navigation, {
+        message: 'Could not save your details.',
+        screen: 'ClinicProfile',
+        error,
+      });
     } finally {
       setSaving(false);
     }
@@ -83,6 +89,7 @@ export default function ClinicProfileScreen() {
             Fill in your professional header once. It is reused whenever you share a prescription PDF from a patient visit.
           </Text>
 
+          <View style={styles.formSection}>
           <Text style={styles.label}>Doctor / practice name</Text>
           <TextInput
             style={styles.input}
@@ -148,6 +155,7 @@ export default function ClinicProfileScreen() {
           >
             <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
           </TouchableOpacity>
+          </View>
         </ScrollView>
       )}
     </KeyboardAvoidingView>
@@ -155,9 +163,10 @@ export default function ClinicProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#f5f6fa' },
+  flex: { flex: 1, backgroundColor: screenColors.bg },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 20, paddingBottom: 40 },
+  content: screenContent(40),
+  formSection: flatSection({ paddingVertical: 16 }),
   hint: {
     fontSize: 13,
     color: '#65708a',

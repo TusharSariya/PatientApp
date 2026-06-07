@@ -234,6 +234,28 @@ The suite includes an **interaction matrix** (~229 tests) that covers:
 
 Matrix-focused files include `inputModeGestureMatrix.test.js`, expanded screen tests, and `GesturePad.test.js` (real responder paths, not mocks).
 
+### Reporting problems and crashes
+
+When something fails, users can send you diagnostics without exposing patient names or medical records.
+
+**In the app (manual report):**
+
+1. Open **Settings → Report a problem**
+2. Describe what happened
+3. Tap **Send report** and share via email, WhatsApp, or any installed app
+
+The shared text file includes app version, device/OS info, currency/input mode, patient count (number only), recent errors from the current session, and the user's notes.
+
+Error alerts on key flows (new patient, visit save, clinic profile save) also include a **Report** button that opens the same screen.
+
+**Automatic reporting (optional Sentry):**
+
+1. Create a project at [sentry.io](https://sentry.io)
+2. Set `EXPO_PUBLIC_SENTRY_DSN` in EAS secrets or a local `.env` file (do not commit the DSN)
+3. Rebuild the app with EAS or `expo run:ios` / `expo run:android`
+
+If the DSN is not set, the app still works using the in-app share flow only. Sentry receives technical errors only; patient fields are redacted in `beforeSend`.
+
 ---
 
 ## Building & Releasing an APK

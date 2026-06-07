@@ -1,7 +1,15 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { flatPressableRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 const ROWS = [
+  {
+    key: 'report',
+    icon: '🐞',
+    title: 'Report a problem',
+    sub: 'Share diagnostics after an error',
+    screen: 'ReportProblem',
+  },
   {
     key: 'clinic',
     icon: '🏥',
@@ -34,46 +42,36 @@ const ROWS = [
 
 export default function SettingsScreen({ navigation }) {
   return (
-    <View style={styles.container}>
-      {ROWS.map(row => (
-        <TouchableOpacity
-          key={row.key}
-          testID={`settings-row-${row.key}`}
-          style={styles.row}
-          onPress={() => navigation.navigate(row.screen)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.icon}>{row.icon}</Text>
-          <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>{row.title}</Text>
-            <Text style={styles.rowSub}>{row.sub}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.section}>
+        {ROWS.map((row, index) => (
+          <TouchableOpacity
+            key={row.key}
+            testID={`settings-row-${row.key}`}
+            style={flatPressableRow({ last: index === ROWS.length - 1 })}
+            onPress={() => navigation.navigate(row.screen)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.icon}>{row.icon}</Text>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>{row.title}</Text>
+              <Text style={styles.rowSub}>{row.sub}</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
-    padding: 20,
+    backgroundColor: screenColors.bg,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
+  content: screenContent(40),
+  section: flatSection(),
   icon: {
     fontSize: 26,
     marginRight: 14,

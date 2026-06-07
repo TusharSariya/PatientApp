@@ -36,7 +36,7 @@ describe('AddPatientScreen', () => {
   });
 
   test('shows validation error when first name or last name is missing', () => {
-    render(<AddPatientScreen />);
+    render(<AddPatientScreen navigation={{ navigate: jest.fn() }} />);
 
     fireEvent.changeText(screen.getByPlaceholderText('e.g. John'), 'Jane');
     fireEvent.press(screen.getByText('Save Patient'));
@@ -50,7 +50,7 @@ describe('AddPatientScreen', () => {
 
   test('shows save error alert when addPatient fails', async () => {
     addPatient.mockRejectedValue(new Error('db'));
-    render(<AddPatientScreen />);
+    render(<AddPatientScreen navigation={{ navigate: jest.fn() }} />);
     fireEvent.changeText(screen.getByPlaceholderText('e.g. John'), 'John');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. Smith'), 'Public');
     fireEvent.press(screen.getByText('Save Patient'));
@@ -62,7 +62,7 @@ describe('AddPatientScreen', () => {
       { family_id: 5, relative_name: 'Ann Lee', member_count: 2 },
     ]);
     addPatient.mockResolvedValue({ patientId: 1, familyId: 5, createdNewFamily: false });
-    render(<AddPatientScreen />);
+    render(<AddPatientScreen navigation={{ navigate: jest.fn() }} />);
     fireEvent.changeText(screen.getByPlaceholderText('Type relative name (e.g. Alice Johnson)'), 'Lee');
     await waitFor(() => expect(screen.getByText('Family #5')).toBeTruthy());
     fireEvent.press(screen.getByText('Family #5'));
@@ -75,7 +75,7 @@ describe('AddPatientScreen', () => {
   });
 
   test('does not render manual gesture buttons for text fields', () => {
-    render(<AddPatientScreen />);
+    render(<AddPatientScreen navigation={{ navigate: jest.fn() }} />);
 
     expect(screen.queryByText('Use Gesture')).toBeNull();
   });
@@ -87,7 +87,7 @@ describe('AddPatientScreen', () => {
       createdNewFamily: true,
     });
 
-    render(<AddPatientScreen />);
+    render(<AddPatientScreen navigation={{ navigate: jest.fn() }} />);
 
     fireEvent.changeText(screen.getByPlaceholderText('e.g. John'), '  John  ');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. Smith'), '  Public ');
@@ -113,7 +113,7 @@ describe('AddPatientScreen', () => {
       createdNewFamily: true,
     });
 
-    render(<AddPatientScreen />);
+    render(<AddPatientScreen navigation={{ navigate: jest.fn() }} />);
 
     fireEvent.changeText(screen.getByPlaceholderText('e.g. John'), '  John  ');
     fireEvent.changeText(screen.getByPlaceholderText('Optional'), '  Q  ');

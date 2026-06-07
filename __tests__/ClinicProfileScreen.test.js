@@ -44,7 +44,7 @@ describe('ClinicProfileScreen', () => {
   });
 
   test('shows loading then populated fields', async () => {
-    render(<ClinicProfileScreen />);
+    render(<ClinicProfileScreen navigation={{ navigate: jest.fn() }} />);
     await waitFor(() => {
       expect(screen.getByDisplayValue('Dr Test')).toBeTruthy();
     });
@@ -52,7 +52,7 @@ describe('ClinicProfileScreen', () => {
   });
 
   test('save success shows confirmation alert', async () => {
-    render(<ClinicProfileScreen />);
+    render(<ClinicProfileScreen navigation={{ navigate: jest.fn() }} />);
     await waitFor(() => expect(screen.getByDisplayValue('Dr Test')).toBeTruthy());
 
     fireEvent.press(screen.getByTestId('clinic-profile-save'));
@@ -72,7 +72,7 @@ describe('ClinicProfileScreen', () => {
 
   test('save error shows error alert', async () => {
     saveClinicProfile.mockRejectedValue(new Error('fail'));
-    render(<ClinicProfileScreen />);
+    render(<ClinicProfileScreen navigation={{ navigate: jest.fn() }} />);
     await waitFor(() => expect(screen.getByDisplayValue('Dr Test')).toBeTruthy());
 
     fireEvent.press(screen.getByTestId('clinic-profile-save'));
@@ -91,7 +91,7 @@ describe('ClinicProfileScreen', () => {
       registration: '',
       hours: '',
     });
-    render(<ClinicProfileScreen />);
+    render(<ClinicProfileScreen navigation={{ navigate: jest.fn() }} />);
     await waitFor(() => {
       expect(screen.getByPlaceholderText('e.g. Dr Linesh Yawalkar')).toBeTruthy();
     });

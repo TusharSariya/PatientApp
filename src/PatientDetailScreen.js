@@ -29,6 +29,7 @@ import {
 } from './database';
 import { formatPatientAge } from './patientAge';
 import { formatPatientNameParts, splitPatientName } from './patientName';
+import { flatPressableRow, flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
@@ -380,7 +381,7 @@ export default function PatientDetailScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.infoCard}>
+        <View style={styles.infoSection}>
           <Text style={styles.name}>{displayedName}</Text>
           {savedPatient.family_id ? <Text style={styles.detail}>Family #{savedPatient.family_id}</Text> : null}
           {patientAge ? <Text style={styles.ageDetail}>{patientAge}</Text> : null}
@@ -388,19 +389,18 @@ export default function PatientDetailScreen({ route, navigation }) {
           <Text style={styles.detail}>Family Balance: {formatMoney(balances.familyBalance, currencyCode)}</Text>
         </View>
 
+        <View style={styles.navSection}>
         <TouchableOpacity
-          style={styles.medCard}
+          style={flatPressableRow()}
           onPress={toggleDetailsExpanded}
           activeOpacity={0.8}
           testID="patient-details-menu-card"
         >
-          <View style={{ flex: 1 }}>
+          <View style={styles.navRowText}>
             <Text style={styles.medTitle}>Patient Details</Text>
             <Text style={styles.medSubtitle}>View demographics, contact details, age, and notes.</Text>
           </View>
-          <View style={styles.medButton}>
-            <Text style={styles.medButtonText}>{detailsExpanded ? 'Close' : 'Open'}</Text>
-          </View>
+          <Text style={styles.navChevron}>{detailsExpanded ? '▲' : '›'}</Text>
         </TouchableOpacity>
 
         {detailsExpanded ? (
@@ -531,24 +531,31 @@ export default function PatientDetailScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        <TouchableOpacity testID="patient-visits-card" style={[styles.medCard, { marginTop: 10 }]} onPress={openVisits} activeOpacity={0.8}>
-          <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          testID="patient-visits-card"
+          style={flatPressableRow()}
+          onPress={openVisits}
+          activeOpacity={0.8}
+        >
+          <View style={styles.navRowText}>
             <Text style={styles.medTitle}>Visits</Text>
             <Text style={styles.medSubtitle}>View visit history and create a new visit.</Text>
           </View>
-          <View style={styles.medButton}>
-            <Text style={styles.medButtonText}>Open</Text>
-          </View>
+          <Text style={styles.navChevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity testID="patient-medicines-card" style={[styles.medCard, { marginTop: 10 }]} onPress={openMedicines} activeOpacity={0.8}>
-          <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          testID="patient-medicines-card"
+          style={flatPressableRow({ last: true })}
+          onPress={openMedicines}
+          activeOpacity={0.8}
+        >
+          <View style={styles.navRowText}>
             <Text style={styles.medTitle}>Medicines</Text>
             <Text style={styles.medSubtitle}>View current medicines and history.</Text>
           </View>
-          <View style={styles.medButton}>
-            <Text style={styles.medButtonText}>Open</Text>
-          </View>
+          <Text style={styles.navChevron}>›</Text>
         </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {editing ? (
@@ -570,23 +577,22 @@ export default function PatientDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
   content: {
-    padding: 24,
-    paddingBottom: 100,
+    ...screenContent(100),
     flexGrow: 1,
   },
-  infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 28,
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+  infoSection: flatSection({ marginBottom: 12, paddingVertical: 16 }),
+  navSection: flatSection(),
+  navRowText: {
+    flex: 1,
+  },
+  navChevron: {
+    fontSize: 20,
+    color: '#4f6ef7',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   name: {
     fontSize: 22,
@@ -600,26 +606,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   ageDetail: {
-    backgroundColor: '#f3f6ff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#dce2f7',
     color: '#2f46c7',
     fontSize: 15,
     fontWeight: '700',
-    marginBottom: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  medCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dce2f7',
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    marginTop: 8,
+    marginBottom: 4,
   },
   medTitle: {
     fontSize: 16,
@@ -632,24 +623,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#5f6d8a',
   },
-  medButton: {
-    backgroundColor: '#4f6ef7',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  medButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
   detailsPanel: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dce2f7',
-    marginTop: 10,
-    padding: 16,
+    ...flatRow(),
+    paddingBottom: 16,
+    borderBottomColor: screenColors.borderLight,
   },
   fieldGroup: {
     marginBottom: 20,
@@ -707,12 +684,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   familyMatchButton: {
-    borderWidth: 1,
-    borderColor: '#dce2f7',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 10,
-    backgroundColor: '#f7f9ff',
+    ...flatRow(),
+    marginTop: 4,
+    backgroundColor: screenColors.tint,
   },
   familyMatchButtonSelected: {
     backgroundColor: '#4f6ef7',

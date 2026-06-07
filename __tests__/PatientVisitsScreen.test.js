@@ -105,7 +105,7 @@ describe('PatientVisitsScreen', () => {
     expect(screen.queryByText('Ibuprofen')).toBeNull();
   });
 
-  test('places medicine section before visit details in the new visit form', async () => {
+  test('places medicine section after weight and before notes in the new visit form', async () => {
     const { toJSON } = render(<PatientVisitsScreen route={{ params: { patient } }} />);
 
     await waitFor(() => {
@@ -113,12 +113,15 @@ describe('PatientVisitsScreen', () => {
     });
 
     const renderedText = collectRenderedText(toJSON());
-    const medicineIndex = renderedText.indexOf('Prescribe Medicines');
-    const complaintsIndex = renderedText.indexOf('Complaints');
+    const medicineIndex = renderedText.indexOf('Medicines');
+    const weightIndex = renderedText.indexOf('Weight');
+    const notesIndex = renderedText.indexOf('Notes');
 
     expect(medicineIndex).toBeGreaterThan(-1);
-    expect(complaintsIndex).toBeGreaterThan(-1);
-    expect(medicineIndex).toBeLessThan(complaintsIndex);
+    expect(weightIndex).toBeGreaterThan(-1);
+    expect(notesIndex).toBeGreaterThan(-1);
+    expect(weightIndex).toBeLessThan(medicineIndex);
+    expect(medicineIndex).toBeLessThan(notesIndex);
   });
 
   test('shows empty state when patient has no current medicines', async () => {

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { updatePatient } from './database';
 import { formatPatientNameParts } from './patientName';
+import { flatSection, screenColors, screenContent } from './screenLayout';
 
 export default function EditPatientScreen({ route, navigation }) {
   const { patient } = route.params;
@@ -59,9 +60,10 @@ export default function EditPatientScreen({ route, navigation }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>Edit Patient Details</Text>
 
+        <View style={styles.formSection}>
         <Text style={styles.label}>First Name</Text>
         <TextInput style={styles.input} value={firstName} onChangeText={setFirstName} />
 
@@ -83,17 +85,18 @@ export default function EditPatientScreen({ route, navigation }) {
         <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
           <Text style={styles.buttonText}>{saving ? 'Saving...' : 'Save Details'}</Text>
         </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    paddingBottom: 48,
-    backgroundColor: '#f5f6fa',
+  content: {
+    ...screenContent(48),
+    backgroundColor: screenColors.bg,
   },
+  formSection: flatSection({ paddingVertical: 16 }),
   heading: {
     fontSize: 24,
     fontWeight: '700',

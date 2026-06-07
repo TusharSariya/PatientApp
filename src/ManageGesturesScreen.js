@@ -15,6 +15,7 @@ import {
 
 import GesturePad from './GesturePad';
 import { addGesture, deleteGesture, getGestures } from './database';
+import { flatPressableRow, flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 function BottomSheet({ visible, onClose, title, children, closeDisabled = false }) {
   function handleClose() {
@@ -201,42 +202,49 @@ export default function ManageGesturesScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <TouchableOpacity
-          style={styles.testCard}
-          onPress={() => navigation.navigate('TestGesture')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.testCardIcon}>🎯</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.testCardTitle}>Test a Gesture</Text>
-            <Text style={styles.testCardSub}>Draw a saved gesture and see the associated word</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Saved Gestures</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setAddVisible(true)}>
-            <Text style={styles.addBtnText}>+ Add</Text>
+        <View style={styles.testBanner}>
+          <TouchableOpacity
+            style={flatPressableRow({ last: true })}
+            onPress={() => navigation.navigate('TestGesture')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.testCardIcon}>🎯</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.testCardTitle}>Test a Gesture</Text>
+              <Text style={styles.testCardSub}>Draw a saved gesture and see the associated word</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         </View>
 
-        {gestures.length === 0 ? (
-          <Text style={styles.empty}>No gestures yet. Tap + Add to create one.</Text>
-        ) : (
-          gestures.map(gesture => (
-            <View key={gesture.id} style={styles.gestureRow}>
-              <Text style={styles.gestureIcon}>👋</Text>
-              <Text style={styles.gestureWord}>{gesture.word}</Text>
-              <TouchableOpacity
-                onPress={() => handleDelete(gesture)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <View style={styles.gesturesSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Saved Gestures</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={() => setAddVisible(true)}>
+              <Text style={styles.addBtnText}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
+
+          {gestures.length === 0 ? (
+            <Text style={styles.empty}>No gestures yet. Tap + Add to create one.</Text>
+          ) : (
+            gestures.map((gesture, index) => (
+              <View
+                key={gesture.id}
+                style={[styles.gestureRow, index === gestures.length - 1 && styles.gestureRowLast]}
               >
-                <Text style={styles.deleteIcon}>🗑</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
+                <Text style={styles.gestureIcon}>👋</Text>
+                <Text style={styles.gestureWord}>{gesture.word}</Text>
+                <TouchableOpacity
+                  onPress={() => handleDelete(gesture)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.deleteIcon}>🗑</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
 
       <BottomSheet
@@ -259,21 +267,18 @@ export default function ManageGesturesScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f6fa' },
-  content: { padding: 20, paddingBottom: 40 },
-  testCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  container: { flex: 1, backgroundColor: screenColors.bg },
+  content: screenContent(40),
+  testBanner: {
+    ...flatSection({ tinted: true, marginBottom: 12 }),
     backgroundColor: '#4f6ef7',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 28,
-    gap: 12,
+    borderColor: '#4f6ef7',
   },
-  testCardIcon: { fontSize: 28 },
+  testCardIcon: { fontSize: 28, marginRight: 12 },
   testCardTitle: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 2 },
   testCardSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
   chevron: { fontSize: 22, color: 'rgba(255,255,255,0.6)' },
+  gesturesSection: flatSection(),
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -290,19 +295,13 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   empty: { color: '#aaa', fontSize: 14, textAlign: 'center', marginTop: 24 },
   gestureRow: {
+    ...flatRow(),
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
     gap: 12,
+  },
+  gestureRowLast: {
+    borderBottomWidth: 0,
   },
   gestureIcon: { fontSize: 22 },
   gestureWord: { flex: 1, fontSize: 16, fontWeight: '600', color: '#1a1a2e' },
@@ -328,8 +327,10 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, color: '#999', marginBottom: 12, lineHeight: 18 },
   captureCard: {
     marginTop: 14,
-    borderRadius: 14,
-    backgroundColor: '#eef2ff',
+    backgroundColor: screenColors.tint,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: screenColors.border,
     padding: 16,
     alignItems: 'center',
     minHeight: 88,

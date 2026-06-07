@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { getAppSettings, saveAppSettings } from './database';
 import { INPUT_MODES } from './inputMode';
+import { flatPressableRow, flatSection, flatSelectedRow, screenColors, screenContent } from './screenLayout';
 
 export default function InputModeSettingsScreen() {
   const [loading, setLoading] = useState(true);
@@ -51,43 +53,48 @@ export default function InputModeSettingsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.intro}>
         Choose what opens first when supported text fields are focused.
       </Text>
-      {INPUT_MODES.map((mode) => {
-        const selected = mode.id === defaultInputMode;
-        return (
-          <TouchableOpacity
-            key={mode.id}
-            style={[styles.row, selected && styles.rowSelected]}
-            onPress={() => handleSelect(mode.id)}
-            disabled={saving}
-            testID={`input-mode-option-${mode.id}`}
-          >
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>{mode.title}</Text>
-              <Text style={styles.rowSub}>{mode.subtitle}</Text>
-            </View>
-            <Text style={[styles.check, selected && styles.checkSelected]}>{selected ? '✓' : ''}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+      <View style={styles.optionsSection}>
+        {INPUT_MODES.map((mode, index) => {
+          const selected = mode.id === defaultInputMode;
+          return (
+            <TouchableOpacity
+              key={mode.id}
+              style={[
+                flatPressableRow({ last: index === INPUT_MODES.length - 1 }),
+                flatSelectedRow(selected),
+              ]}
+              onPress={() => handleSelect(mode.id)}
+              disabled={saving}
+              testID={`input-mode-option-${mode.id}`}
+            >
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>{mode.title}</Text>
+                <Text style={styles.rowSub}>{mode.subtitle}</Text>
+              </View>
+              <Text style={[styles.check, selected && styles.checkSelected]}>{selected ? '✓' : ''}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
-    padding: 20,
+    backgroundColor: screenColors.bg,
   },
+  content: screenContent(40),
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
   },
   intro: {
     fontSize: 14,
@@ -95,19 +102,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 20,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  rowSelected: {
-    borderColor: '#4f6ef7',
-  },
+  optionsSection: flatSection(),
   rowText: {
     flex: 1,
     paddingRight: 12,

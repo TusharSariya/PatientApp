@@ -11,10 +11,12 @@ import {
   Platform,
 } from 'react-native';
 import { addPatient, searchFamiliesByRelativeName } from './database';
+import { showErrorAlert } from './errorAlerts';
 import { useGestureTextInput } from './GestureInputProvider';
 import { formatPatientNameParts } from './patientName';
+import { flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
-export default function AddPatientScreen() {
+export default function AddPatientScreen({ navigation }) {
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -104,7 +106,11 @@ export default function AddPatientScreen() {
       setPhone('');
       setAddress('');
     } catch (e) {
-      Alert.alert('Error', e?.message ?? 'Failed to save patient.');
+      showErrorAlert(navigation, {
+        message: e?.message ?? 'Failed to save patient.',
+        screen: 'AddPatient',
+        error: e,
+      });
     } finally {
       setLoading(false);
     }
@@ -115,9 +121,10 @@ export default function AddPatientScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>New Patient</Text>
 
+        <View style={styles.formSection}>
         <Text style={styles.label}>First Name</Text>
         <TextInput
           ref={firstNameInput.ref}
@@ -255,16 +262,18 @@ export default function AddPatientScreen() {
         >
           <Text style={styles.buttonText}>{loading ? 'Saving…' : 'Save Patient'}</Text>
         </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    paddingBottom: 48,
+  content: {
+    ...screenContent(48),
+    backgroundColor: screenColors.bg,
   },
+  formSection: flatSection({ paddingVertical: 16 }),
   heading: {
     fontSize: 26,
     fontWeight: '700',
@@ -302,13 +311,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   familyMatchButton: {
-    borderWidth: 1,
-    borderColor: '#d9dff5',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+    ...flatRow(),
+    backgroundColor: screenColors.tint,
   },
   familyMatchButtonSelected: {
     borderColor: '#4f6ef7',

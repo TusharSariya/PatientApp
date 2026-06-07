@@ -11,15 +11,23 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { searchPatients, getAllPatients } from './database';
 import { useGestureTextInput } from './GestureInputProvider';
+import { flatPressableRow, flatSection, screenColors, screenContent } from './screenLayout';
 
-function PatientCard({ patient, onPress }) {
+function PatientCard({ patient, onPress, last }) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
-      <Text style={styles.cardName}>{patient.name}</Text>
-      {patient.family_id ? <Text style={styles.cardDetail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
-      {patient.dob ? <Text style={styles.cardDetail}>🎂 {patient.dob}</Text> : null}
-      <Text style={styles.cardDetail}>📞 {patient.phone}</Text>
-      <Text style={styles.cardDetail}>📍 {patient.address}</Text>
+    <TouchableOpacity
+      style={flatPressableRow({ last })}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View style={styles.cardBody}>
+        <Text style={styles.cardName}>{patient.name}</Text>
+        {patient.family_id ? <Text style={styles.cardDetail}>👨‍👩‍👧‍👦 Family #{patient.family_id}</Text> : null}
+        {patient.dob ? <Text style={styles.cardDetail}>🎂 {patient.dob}</Text> : null}
+        <Text style={styles.cardDetail}>📞 {patient.phone}</Text>
+        <Text style={styles.cardDetail}>📍 {patient.address}</Text>
+      </View>
+      <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>
   );
 }
@@ -113,30 +121,34 @@ export default function SearchScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Patients</Text>
-      <Text style={styles.subhead}>Use first, middle, and last name prefixes to narrow to the exact patient.</Text>
+      <View style={styles.header}>
+        <Text style={styles.heading}>Patients</Text>
+        <Text style={styles.subhead}>Use first, middle, and last name prefixes to narrow to the exact patient.</Text>
+      </View>
 
-      <SearchField
-        label="First Name"
-        value={firstName}
-        onChangeText={handleFirstNameChange}
-        input={firstNameInput}
-        placeholder="Prefix, e.g. Jo"
-      />
-      <SearchField
-        label="Middle Name"
-        value={middleName}
-        onChangeText={handleMiddleNameChange}
-        input={middleNameInput}
-        placeholder="Optional prefix"
-      />
-      <SearchField
-        label="Last Name"
-        value={lastName}
-        onChangeText={handleLastNameChange}
-        input={lastNameInput}
-        placeholder="Prefix, e.g. Sm"
-      />
+      <View style={styles.searchSection}>
+        <SearchField
+          label="First Name"
+          value={firstName}
+          onChangeText={handleFirstNameChange}
+          input={firstNameInput}
+          placeholder="Prefix, e.g. Jo"
+        />
+        <SearchField
+          label="Middle Name"
+          value={middleName}
+          onChangeText={handleMiddleNameChange}
+          input={middleNameInput}
+          placeholder="Optional prefix"
+        />
+        <SearchField
+          label="Last Name"
+          value={lastName}
+          onChangeText={handleLastNameChange}
+          input={lastNameInput}
+          placeholder="Prefix, e.g. Sm"
+        />
+      </View>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#4f6ef7" />
@@ -145,17 +157,20 @@ export default function SearchScreen({ navigation }) {
           {hasSearch ? 'No patients match those name prefixes.' : 'No patients yet. Add one!'}
         </Text>
       ) : (
-        <FlatList
-          data={patients}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <PatientCard
-              patient={item}
-              onPress={() => navigation.navigate('PatientDetail', { patient: item })}
-            />
-          )}
-          contentContainerStyle={{ paddingBottom: 24 }}
-        />
+        <View style={styles.resultsSection}>
+          <FlatList
+            data={patients}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={({ item, index }) => (
+              <PatientCard
+                patient={item}
+                last={index === patients.length - 1}
+                onPress={() => navigation.navigate('PatientDetail', { patient: item })}
+              />
+            )}
+            scrollEnabled={false}
+          />
+        </View>
       )}
     </View>
   );
@@ -164,8 +179,13 @@ export default function SearchScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: screenColors.bg,
+    paddingHorizontal: screenContent().paddingHorizontal,
+    paddingBottom: 24,
+  },
+  header: {
+    paddingTop: 8,
+    marginBottom: 16,
   },
   heading: {
     fontSize: 26,
@@ -177,8 +197,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: '#61708a',
-    marginBottom: 18,
   },
+  searchSection: {
+    ...flatSection({ marginBottom: 16 }),
+  },
+  resultsSection: flatSection(),
   fieldGroup: {
     marginBottom: 14,
   },
@@ -206,26 +229,23 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 16,
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+  cardBody: {
+    flex: 1,
   },
   cardName: {
     fontSize: 17,
     fontWeight: '700',
     color: '#1a1a2e',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   cardDetail: {
     fontSize: 14,
     color: '#555',
     marginTop: 2,
+  },
+  chevron: {
+    fontSize: 22,
+    color: '#ccc',
+    marginLeft: 8,
   },
 });

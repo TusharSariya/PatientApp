@@ -6,6 +6,7 @@ import { makeNavigation } from './helpers/matrix';
 
 describe('SettingsScreen', () => {
   test.each([
+    ['settings-row-report', 'ReportProblem'],
     ['settings-row-clinic', 'ClinicProfile'],
     ['settings-row-currency', 'CurrencySettings'],
     ['settings-row-inputMode', 'InputModeSettings'],
