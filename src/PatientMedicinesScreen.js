@@ -22,7 +22,8 @@ import {
 import { useGestureTextInput } from './GestureInputProvider';
 import MedicationFrequencyField from './MedicationFrequencyField';
 import IntervalDaysStepper from './IntervalDaysStepper';
-import { formatMedicineSubtitle } from './medicineDisplay';
+import { formatMedicineSubtitle, normalizeDurationInput } from './medicineDisplay';
+import MedicineDurationField from './MedicineDurationField';
 import { flatPressableRow, flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
@@ -119,7 +120,12 @@ export default function PatientMedicinesScreen({ route }) {
 
   const medNameInput = useGestureTextInput({ label: 'Medicine Name', value: medForm.name, setValue: value => setMedForm(form => ({ ...form, name: value })), inputRef: medNameRef });
   const medDosageInput = useGestureTextInput({ label: 'Medicine Dosage', value: medForm.dosage, setValue: value => setMedForm(form => ({ ...form, dosage: value })), inputRef: medDosageRef });
-  const medDurationInput = useGestureTextInput({ label: 'Medicine Duration', value: medForm.duration, setValue: value => setMedForm(form => ({ ...form, duration: value })), inputRef: medDurationRef });
+  const medDurationInput = useGestureTextInput({
+    label: 'Medicine Duration',
+    value: medForm.duration,
+    setValue: (value) => setMedForm((form) => ({ ...form, duration: normalizeDurationInput(value) })),
+    inputRef: medDurationRef,
+  });
   const medInstructionsInput = useGestureTextInput({ label: 'Medicine Instructions', value: medForm.instructions, setValue: value => setMedForm(form => ({ ...form, instructions: value })), inputRef: medInstructionsRef });
 
   const loadData = useCallback(async () => {
@@ -153,7 +159,7 @@ export default function PatientMedicinesScreen({ route }) {
         dosage: medForm.dosage.trim(),
         frequency: medForm.frequency.trim(),
         intervalDays: medForm.intervalDays,
-        duration: medForm.duration.trim(),
+        duration: normalizeDurationInput(medForm.duration),
         route: medForm.route,
         instructions: medForm.instructions.trim(),
       });
@@ -321,18 +327,17 @@ export default function PatientMedicinesScreen({ route }) {
           />
 
           <Text style={styles.fieldLabel}>Duration</Text>
-          <TextInput
+          <MedicineDurationField
             ref={medDurationInput.ref}
-            style={[styles.fieldInput, { marginBottom: 16 }]}
+            testID="patient-medicine-duration"
+            style={{ marginBottom: 4 }}
             value={medForm.duration}
-            onChangeText={v => setMedForm(f => ({ ...f, duration: v }))}
+            onChangeText={(value) => setMedForm((f) => ({ ...f, duration: value }))}
             showSoftInputOnFocus={medDurationInput.showSoftInputOnFocus}
             onFocus={medDurationInput.onFocus}
             onBlur={medDurationInput.onBlur}
             onSelectionChange={medDurationInput.onSelectionChange}
             selection={medDurationInput.selection}
-            placeholder="e.g. 7 days"
-            placeholderTextColor="#bbb"
           />
 
           <Text style={styles.fieldLabel}>Route</Text>

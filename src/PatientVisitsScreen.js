@@ -27,7 +27,13 @@ import { showErrorAlert } from './errorAlerts';
 import { sharePrescriptionPdf } from './prescriptionPdf';
 import MedicationFrequencyField from './MedicationFrequencyField';
 import IntervalDaysStepper from './IntervalDaysStepper';
-import { formatMedicineSubtitle, medicineToDraftForm } from './medicineDisplay';
+import {
+  durationToInputValue,
+  formatMedicineSubtitle,
+  medicineToDraftForm,
+  normalizeDurationInput,
+} from './medicineDisplay';
+import MedicineDurationField from './MedicineDurationField';
 import { flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
@@ -50,7 +56,7 @@ function normalizeDraftMed(value) {
     dosage: value?.dosage ?? '',
     frequency: value?.frequency ?? '',
     intervalDays: value?.intervalDays ?? value?.interval_days ?? 1,
-    duration: value?.duration ?? '',
+    duration: durationToInputValue(value?.duration),
     route: value?.route ?? 'Oral',
     instructions: value?.instructions ?? '',
   };
@@ -384,7 +390,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
       dosage: draftMed.dosage.trim(),
       frequency: draftMed.frequency.trim(),
       intervalDays: draftMed.intervalDays,
-      duration: draftMed.duration.trim(),
+      duration: normalizeDurationInput(draftMed.duration),
       route: draftMed.route,
       instructions: draftMed.instructions.trim(),
     };
@@ -425,7 +431,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
       dosage: med.dosage,
       frequency: med.frequency,
       intervalDays: med.intervalDays,
-      duration: med.duration,
+      duration: durationToInputValue(med.duration),
       route: med.route,
       instructions: med.instructions,
     });
@@ -528,12 +534,11 @@ export default function PatientVisitsScreen({ route, navigation }) {
           value={draftMed.frequency}
           onChange={(frequency) => setDraftMed((m) => ({ ...m, frequency }))}
         />
-        <TextInput
-          style={styles.input}
+        <Text style={styles.label}>Duration</Text>
+        <MedicineDurationField
+          testID="visit-medicine-duration"
           value={draftMed.duration}
           onChangeText={(value) => setDraftMed((m) => ({ ...m, duration: value }))}
-          placeholder="Duration"
-          placeholderTextColor="#bbb"
         />
         <View style={styles.routeRow}>
           {ROUTES.map((routeName) => (

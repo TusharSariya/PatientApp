@@ -159,7 +159,8 @@ describe('PatientVisitsScreen', () => {
 
     expect(screen.getByPlaceholderText('Medicine name').props.value).toBe('Ibuprofen');
     expect(screen.getByPlaceholderText('Dosage').props.value).toBe('400mg');
-    expect(screen.getByPlaceholderText('Duration').props.value).toBe('5 days');
+    expect(screen.getByTestId('visit-medicine-duration').props.value).toBe('5');
+    expect(screen.getByTestId('visit-medicine-duration').props.maxLength).toBe(3);
   });
 
   test('adjusts visit medicine interval with stepper controls', async () => {

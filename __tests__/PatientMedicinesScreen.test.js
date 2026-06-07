@@ -70,7 +70,7 @@ describe('PatientMedicinesScreen', () => {
     fireEvent.changeText(screen.getByPlaceholderText('e.g. Amoxicillin'), '  Amoxicillin  ');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. 500mg'), ' 500mg ');
     fireEvent.press(screen.getByTestId('frequency-preset-3'));
-    fireEvent.changeText(screen.getByPlaceholderText('e.g. 7 days'), ' 7 days ');
+    fireEvent.changeText(screen.getByTestId('patient-medicine-duration'), ' 7 ');
     fireEvent.changeText(screen.getByPlaceholderText('e.g. Take after meals'), ' after meals ');
 
     fireEvent.press(screen.getByText('Save Medicine'));
@@ -81,7 +81,7 @@ describe('PatientMedicinesScreen', () => {
         dosage: '500mg',
         frequency: '3x/day',
         intervalDays: 1,
-        duration: '7 days',
+        duration: '7',
         route: 'Oral',
         instructions: 'after meals',
       });

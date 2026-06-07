@@ -1,4 +1,9 @@
-import { formatMedicineSubtitle, medicineToDraftForm } from '../src/medicineDisplay';
+import {
+  durationToInputValue,
+  formatMedicineSubtitle,
+  medicineToDraftForm,
+  normalizeDurationInput,
+} from '../src/medicineDisplay';
 
 describe('medicineDisplay', () => {
   test('formatMedicineSubtitle joins dosage frequency and interval', () => {
@@ -9,6 +14,20 @@ describe('medicineDisplay', () => {
         interval_days: 2,
       })
     ).toBe('400mg · 2x/day · q2d');
+  });
+
+  test('normalizeDurationInput trims and limits to three characters', () => {
+    expect(normalizeDurationInput('  30  ')).toBe('30');
+    expect(normalizeDurationInput('1234')).toBe('123');
+    expect(normalizeDurationInput(null)).toBe('');
+  });
+
+  test('durationToInputValue extracts leading digits from legacy values', () => {
+    expect(durationToInputValue('5 days')).toBe('5');
+    expect(durationToInputValue('30 days')).toBe('30');
+    expect(durationToInputValue('14')).toBe('14');
+    expect(durationToInputValue('abc')).toBe('abc');
+    expect(durationToInputValue('')).toBe('');
   });
 
   test('medicineToDraftForm maps database row to draft shape', () => {
@@ -27,7 +46,7 @@ describe('medicineDisplay', () => {
       dosage: '400mg',
       frequency: '2x/day',
       intervalDays: 1,
-      duration: '5 days',
+      duration: '5',
       route: 'Oral',
       instructions: 'Take with food',
     });
