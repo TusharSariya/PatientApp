@@ -330,7 +330,7 @@ describe('PatientVisitsScreen', () => {
     });
 
     fireEvent.changeText(screen.getByPlaceholderText('Chief complaints'), 'Fever');
-    fireEvent.press(screen.getByText('Create Visit'));
+    fireEvent.press(screen.getByText('Save Visit'));
 
     await waitFor(() => {
       expect(addVisit).toHaveBeenCalledWith(

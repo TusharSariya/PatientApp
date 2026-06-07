@@ -780,7 +780,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
             onPress={handleCreateVisit}
             disabled={saving}
           >
-            <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Create Visit'}</Text>
+            <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save Visit'}</Text>
           </TouchableOpacity>
         </View>
 
