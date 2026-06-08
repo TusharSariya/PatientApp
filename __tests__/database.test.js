@@ -70,7 +70,12 @@ describe('database', () => {
     const { database } = await loadDatabaseModule({ dev: false, db });
 
     const settings = await database.getAppSettings();
-    expect(settings).toEqual({ currencyCode: 'INR', defaultInputMode: 'gestures' });
+    expect(settings).toEqual({
+      currencyCode: 'INR',
+      defaultInputMode: 'gestures',
+      gemmaModelVariant: 'e2b',
+      gemmaModelDownloaded: false,
+    });
   });
 
   test('saveAppSettings updates currency_code and preserves input mode', async () => {
@@ -86,10 +91,15 @@ describe('database', () => {
     const { database } = await loadDatabaseModule({ dev: false, db });
 
     const settings = await database.saveAppSettings({ currencyCode: 'USD' });
-    expect(settings).toEqual({ currencyCode: 'USD', defaultInputMode: 'voice' });
+    expect(settings).toEqual({
+      currencyCode: 'USD',
+      defaultInputMode: 'voice',
+      gemmaModelVariant: 'e2b',
+      gemmaModelDownloaded: false,
+    });
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE app_settings'),
-      ['USD', 'voice']
+      ['USD', 'voice', 'e2b', 0]
     );
   });
 
@@ -107,10 +117,15 @@ describe('database', () => {
 
     const settings = await database.saveAppSettings({ defaultInputMode: 'keyboard' });
 
-    expect(settings).toEqual({ currencyCode: 'USD', defaultInputMode: 'keyboard' });
+    expect(settings).toEqual({
+      currencyCode: 'USD',
+      defaultInputMode: 'keyboard',
+      gemmaModelVariant: 'e2b',
+      gemmaModelDownloaded: false,
+    });
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE app_settings'),
-      ['USD', 'keyboard']
+      ['USD', 'keyboard', 'e2b', 0]
     );
   });
 
@@ -127,7 +142,12 @@ describe('database', () => {
 
     const settings = await database.getAppSettings();
 
-    expect(settings).toEqual({ currencyCode: 'USD', defaultInputMode: 'gestures' });
+    expect(settings).toEqual({
+      currencyCode: 'USD',
+      defaultInputMode: 'gestures',
+      gemmaModelVariant: 'e2b',
+      gemmaModelDownloaded: false,
+    });
   });
 
   test('adds default input mode column for existing app settings tables', async () => {
@@ -523,6 +543,7 @@ describe('database', () => {
           payment_scope: 'family',
           draft_med_json: '{"name":"Azithro","intervalDays":1}',
           medicines_json: '[{"draftId":1,"name":"Paracetamol"}]',
+          narrative_transcript: '',
           updated_at: '2026-05-20 10:00:00',
         };
       }
@@ -570,6 +591,7 @@ describe('database', () => {
         'family',
         JSON.stringify({ name: 'Azithro', intervalDays: 1 }),
         JSON.stringify([{ draftId: 1, name: 'Paracetamol' }]),
+        '',
       ]
     );
     expect(draft).toEqual({
@@ -588,6 +610,7 @@ describe('database', () => {
       paymentScope: 'family',
       draftMed: { name: 'Azithro', intervalDays: 1 },
       medicines: [{ draftId: 1, name: 'Paracetamol' }],
+      narrativeTranscript: '',
       updatedAt: '2026-05-20 10:00:00',
     });
     expect(db.runAsync).toHaveBeenNthCalledWith(

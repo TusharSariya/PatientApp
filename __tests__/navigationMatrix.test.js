@@ -21,6 +21,7 @@ jest.mock('../src/GestureInputProvider', () => ({
   GestureInputProvider: ({ children }) => children,
 }));
 jest.mock('../src/ReportProblemScreen', () => () => null);
+jest.mock('../src/VisitAiSettingsScreen', () => () => null);
 jest.mock('../src/database', () => ({
   getAppSettings: jest.fn().mockResolvedValue({ currencyCode: 'INR', defaultInputMode: 'gestures' }),
   getGestures: jest.fn().mockResolvedValue([]),

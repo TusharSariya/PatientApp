@@ -25,6 +25,13 @@ const ROWS = [
     screen: 'CurrencySettings',
   },
   {
+    key: 'visitAi',
+    icon: '🧠',
+    title: 'Visit AI',
+    sub: 'On-device Gemma 4 visit dictation',
+    screen: 'VisitAiSettings',
+  },
+  {
     key: 'inputMode',
     icon: '⌨',
     title: 'Input Mode',

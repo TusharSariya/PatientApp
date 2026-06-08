@@ -34,6 +34,9 @@ import {
   normalizeDurationInput,
 } from './medicineDisplay';
 import MedicineDurationField from './MedicineDurationField';
+import { applyExtractedVisit } from './visitExtraction/applyExtractedVisit';
+import VisitExtractionReviewSheet from './VisitExtractionReviewSheet';
+import VisitNarrativeSheet from './VisitNarrativeSheet';
 import { flatRow, flatSection, screenColors, screenContent } from './screenLayout';
 
 const ROUTES = ['Oral', 'Topical', 'IV', 'IM', 'Other'];
@@ -111,6 +114,11 @@ export default function PatientVisitsScreen({ route, navigation }) {
   const [draftReady, setDraftReady] = useState(false);
   const [draftStatus, setDraftStatus] = useState('');
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [narrativeTranscript, setNarrativeTranscript] = useState('');
+  const [narrativeSheetVisible, setNarrativeSheetVisible] = useState(false);
+  const [reviewSheetVisible, setReviewSheetVisible] = useState(false);
+  const [pendingExtraction, setPendingExtraction] = useState(null);
+  const [gemmaModelVariant, setGemmaModelVariant] = useState('e2b');
   const skipAutosaveRef = useRef(false);
 
   const loadVisits = useCallback(async () => {
@@ -126,6 +134,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
       setCurrentMedicines(activeMeds);
       const settings = await getAppSettings();
       setCurrencyCode(settings.currencyCode);
+      setGemmaModelVariant(settings.gemmaModelVariant ?? 'e2b');
     } finally {
       setLoading(false);
     }
@@ -153,6 +162,31 @@ export default function PatientVisitsScreen({ route, navigation }) {
     setVisitCost('');
     setPaymentAmount('');
     setPaymentScope('patient');
+    setNarrativeTranscript('');
+  }
+
+  function handleApplyExtractedVisit({ fields, selection, transcript }) {
+    const updates = applyExtractedVisit(fields, selection, {
+      prescribedMeds,
+      nextDraftId: nextDraftIdRef.current + 1,
+      narrativeTranscript: transcript,
+    });
+    if (updates.visitDate != null) setVisitDate(updates.visitDate);
+    if (updates.complaints != null) setComplaints(updates.complaints);
+    if (updates.findings != null) setFindings(updates.findings);
+    if (updates.bp != null) setBp(updates.bp);
+    if (updates.weight != null) setWeight(updates.weight);
+    if (updates.weightUnit != null) setWeightUnit(updates.weightUnit);
+    if (updates.investigations != null) setInvestigations(updates.investigations);
+    if (updates.procedures != null) setProcedures(updates.procedures);
+    if (updates.diagnosis != null) setDiagnosis(updates.diagnosis);
+    if (updates.notes != null) setNotes(updates.notes);
+    if (updates.visitCost != null) setVisitCost(updates.visitCost);
+    if (updates.paymentAmount != null) setPaymentAmount(updates.paymentAmount);
+    if (updates.paymentScope != null) setPaymentScope(updates.paymentScope);
+    if (updates.prescribedMeds) setPrescribedMeds(updates.prescribedMeds);
+    if (updates.nextDraftId) nextDraftIdRef.current = updates.nextDraftId;
+    if (updates.narrativeTranscript) setNarrativeTranscript(updates.narrativeTranscript);
   }
 
   function buildDraftPayload() {
@@ -172,6 +206,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
       paymentScope,
       draftMed,
       medicines: prescribedMeds,
+      narrativeTranscript,
     };
   }
 
@@ -217,6 +252,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
     setPrescribedMeds(restoredMeds);
     nextDraftIdRef.current = restoredMeds.reduce((max, med) => Math.max(max, med.draftId), 0);
     setDraftMed(normalizeDraftMed(draft.draftMed));
+    setNarrativeTranscript(draft.narrativeTranscript ?? '');
     setEditingDraftId(null);
   }
 
@@ -297,6 +333,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
     visitCost,
     paymentAmount,
     paymentScope,
+    narrativeTranscript,
     hasSavedDraft,
   ]);
 
@@ -625,15 +662,24 @@ export default function PatientVisitsScreen({ route, navigation }) {
               <Text style={styles.sectionTitle}>New Visit</Text>
               {draftStatus ? <Text style={styles.draftStatus}>{draftStatus}</Text> : null}
             </View>
-            {hasSavedDraft || hasDraftContent(buildDraftPayload()) ? (
+            <View style={styles.formHeaderActions}>
               <TouchableOpacity
-                style={styles.discardDraftButton}
-                onPress={handleDiscardDraft}
-                testID="discard-draft-visit-button"
+                testID="dictate-visit-button"
+                style={styles.dictateVisitButton}
+                onPress={() => setNarrativeSheetVisible(true)}
               >
-                <Text style={styles.discardDraftButtonText}>Discard Draft</Text>
+                <Text style={styles.dictateVisitButtonText}>Dictate Visit</Text>
               </TouchableOpacity>
-            ) : null}
+              {hasSavedDraft || hasDraftContent(buildDraftPayload()) ? (
+                <TouchableOpacity
+                  style={styles.discardDraftButton}
+                  onPress={handleDiscardDraft}
+                  testID="discard-draft-visit-button"
+                >
+                  <Text style={styles.discardDraftButtonText}>Discard Draft</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
           <Text style={styles.label}>Visit Date</Text>
           <TextInput
@@ -830,6 +876,24 @@ export default function PatientVisitsScreen({ route, navigation }) {
           ))
         )}
       </ScrollView>
+      <VisitNarrativeSheet
+        visible={narrativeSheetVisible}
+        gemmaVariant={gemmaModelVariant}
+        onClose={() => setNarrativeSheetVisible(false)}
+        onExtracted={(extraction) => {
+          setPendingExtraction(extraction);
+          setReviewSheetVisible(true);
+        }}
+      />
+      <VisitExtractionReviewSheet
+        visible={reviewSheetVisible}
+        extraction={pendingExtraction}
+        onClose={() => {
+          setReviewSheetVisible(false);
+          setPendingExtraction(null);
+        }}
+        onApply={handleApplyExtractedVisit}
+      />
     </View>
   );
 }
@@ -892,6 +956,23 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  formHeaderActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  dictateVisitButton: {
+    borderWidth: 1,
+    borderColor: '#4f6ef7',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#e9eeff',
+  },
+  dictateVisitButtonText: {
+    color: '#2f46c7',
+    fontWeight: '700',
+    fontSize: 13,
   },
   draftStatus: {
     marginTop: 4,

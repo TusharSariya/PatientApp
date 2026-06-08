@@ -236,6 +236,36 @@ git push --no-verify
 
 Consider enabling branch protection on `main` in your GitHub repo settings so merges require the CI check to pass.
 
+### On-device visit dictation (Gemma 4)
+
+PatientApp can dictation-fill a visit form using **Gemma 4** via [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) (`react-native-litert-lm`). Audio and extraction run on the phone; no visit data is sent to a cloud LLM.
+
+**Requirements**
+
+- Custom dev/production build (not Expo Go)
+- Physical ARM device (Android API 26+, iOS 15+)
+- ~3 GB free storage for the model download
+- 4 GB+ RAM for Gemma 4 E2B; 6 GB+ recommended for E4B
+- iOS: paid Apple Developer account for the extended virtual addressing entitlement
+
+**Setup**
+
+1. Open **Settings → Visit AI**
+2. Choose **E2B** (default) or **E4B**
+3. Tap **Download model** and wait for the on-device cache to finish
+4. On a patient’s **Visits** screen, tap **Dictate Visit**, record the encounter, review extracted fields, then **Apply**
+
+Inference uses Gemma native audio when the model is loaded. If the model is unavailable, the app can capture a transcript with system speech, but extraction still requires the downloaded model.
+
+Rebuild native projects after installing dependencies:
+
+```bash
+npx expo prebuild --clean
+npx expo run:ios --device
+# or
+npx expo run:android --device
+```
+
 ### Interaction test matrix
 
 The suite includes an **interaction matrix** (~229 tests) that covers:

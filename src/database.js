@@ -282,6 +282,20 @@ async function ensureAppSettingsSchema(database) {
   if (!names.has('default_input_mode')) {
     await database.execAsync(`ALTER TABLE app_settings ADD COLUMN default_input_mode TEXT NOT NULL DEFAULT '${DEFAULT_INPUT_MODE}';`);
   }
+  if (!names.has('gemma_model_variant')) {
+    await database.execAsync("ALTER TABLE app_settings ADD COLUMN gemma_model_variant TEXT NOT NULL DEFAULT 'e2b';");
+  }
+  if (!names.has('gemma_model_downloaded')) {
+    await database.execAsync('ALTER TABLE app_settings ADD COLUMN gemma_model_downloaded INTEGER NOT NULL DEFAULT 0;');
+  }
+}
+
+async function ensureDraftVisitColumns(database) {
+  const columns = await database.getAllAsync('PRAGMA table_info(draft_visits)');
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('narrative_transcript')) {
+    await database.execAsync("ALTER TABLE draft_visits ADD COLUMN narrative_transcript TEXT NOT NULL DEFAULT '';");
+  }
 }
 
 async function ensureVisitColumns(database) {
@@ -548,6 +562,7 @@ export async function getDb() {
     `);
 
     await ensureAppSettingsSchema(db);
+    await ensureDraftVisitColumns(db);
     await ensurePatientsSchema(db);
     await ensurePatientsDobColumn(db);
     await ensurePatientsNotesColumn(db);
@@ -960,6 +975,7 @@ export async function getDraftVisit(patientId) {
     paymentScope: row.payment_scope === 'family' ? 'family' : 'patient',
     draftMed: parseDraftJson(row.draft_med_json, {}),
     medicines: parseDraftJson(row.medicines_json, []),
+    narrativeTranscript: row.narrative_transcript ?? '',
     updatedAt: row.updated_at,
   };
 }
@@ -985,8 +1001,9 @@ export async function saveDraftVisit(patientId, draft) {
         payment_scope,
         draft_med_json,
         medicines_json,
+        narrative_transcript,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(patient_id) DO UPDATE SET
         visit_date = excluded.visit_date,
         complaints = excluded.complaints,
@@ -1003,6 +1020,7 @@ export async function saveDraftVisit(patientId, draft) {
         payment_scope = excluded.payment_scope,
         draft_med_json = excluded.draft_med_json,
         medicines_json = excluded.medicines_json,
+        narrative_transcript = excluded.narrative_transcript,
         updated_at = CURRENT_TIMESTAMP
     `,
     [
@@ -1022,6 +1040,7 @@ export async function saveDraftVisit(patientId, draft) {
       draft.paymentScope === 'family' ? 'family' : 'patient',
       JSON.stringify(draft.draftMed ?? {}),
       JSON.stringify(draft.medicines ?? []),
+      draft.narrativeTranscript ?? '',
     ]
   );
 }
@@ -1230,11 +1249,17 @@ export async function getClinicProfile() {
   return mapClinicProfileRow(row);
 }
 
+function normalizeGemmaModelVariant(value) {
+  return value === 'e4b' ? 'e4b' : 'e2b';
+}
+
 export function mapAppSettingsRow(row) {
   const code = row?.currency_code ?? DEFAULT_CURRENCY_CODE;
   return {
     currencyCode: isValidCurrencyCode(code) ? code : DEFAULT_CURRENCY_CODE,
     defaultInputMode: normalizeInputMode(row?.default_input_mode),
+    gemmaModelVariant: normalizeGemmaModelVariant(row?.gemma_model_variant),
+    gemmaModelDownloaded: Boolean(row?.gemma_model_downloaded),
   };
 }
 
@@ -1257,7 +1282,12 @@ function notifyAppSettings(settings) {
   });
 }
 
-export async function saveAppSettings({ currencyCode, defaultInputMode } = {}) {
+export async function saveAppSettings({
+  currencyCode,
+  defaultInputMode,
+  gemmaModelVariant,
+  gemmaModelDownloaded,
+} = {}) {
   const database = await getDb();
   const current = await getAppSettings();
   const normalizedCurrency = currencyCode == null
@@ -1266,13 +1296,21 @@ export async function saveAppSettings({ currencyCode, defaultInputMode } = {}) {
   const normalizedInputMode = defaultInputMode == null
     ? current.defaultInputMode
     : normalizeInputMode(defaultInputMode);
+  const normalizedGemmaVariant = gemmaModelVariant == null
+    ? current.gemmaModelVariant
+    : normalizeGemmaModelVariant(gemmaModelVariant);
+  const normalizedGemmaDownloaded = gemmaModelDownloaded == null
+    ? (current.gemmaModelDownloaded ? 1 : 0)
+    : (gemmaModelDownloaded ? 1 : 0);
   await database.runAsync(
-    'UPDATE app_settings SET currency_code = ?, default_input_mode = ? WHERE id = 1',
-    [normalizedCurrency, normalizedInputMode]
+    'UPDATE app_settings SET currency_code = ?, default_input_mode = ?, gemma_model_variant = ?, gemma_model_downloaded = ? WHERE id = 1',
+    [normalizedCurrency, normalizedInputMode, normalizedGemmaVariant, normalizedGemmaDownloaded]
   );
   const settings = mapAppSettingsRow({
     currency_code: normalizedCurrency,
     default_input_mode: normalizedInputMode,
+    gemma_model_variant: normalizedGemmaVariant,
+    gemma_model_downloaded: normalizedGemmaDownloaded,
   });
   notifyAppSettings(settings);
   return settings;

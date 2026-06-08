@@ -14,6 +14,7 @@ import SettingsScreen from './src/SettingsScreen';
 import ClinicProfileScreen from './src/ClinicProfileScreen';
 import CurrencySettingsScreen from './src/CurrencySettingsScreen';
 import InputModeSettingsScreen from './src/InputModeSettingsScreen';
+import VisitAiSettingsScreen from './src/VisitAiSettingsScreen';
 import ManageGesturesScreen from './src/ManageGesturesScreen';
 import TestGestureScreen from './src/TestGestureScreen';
 import AllVisitsScreen from './src/AllVisitsScreen';
@@ -107,6 +108,11 @@ export default function App() {
               name="InputModeSettings"
               component={InputModeSettingsScreen}
               options={{ title: 'Input Mode' }}
+            />
+            <Stack.Screen
+              name="VisitAiSettings"
+              component={VisitAiSettingsScreen}
+              options={{ title: 'Visit AI' }}
             />
             <Stack.Screen
               name="ManageGestures"

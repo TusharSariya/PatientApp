@@ -35,6 +35,55 @@ jest.mock('../src/prescriptionPdf', () => ({
   sharePrescriptionPdf: jest.fn(),
 }));
 
+jest.mock('../src/VisitNarrativeSheet', () => {
+  const React = require('react');
+  const { Pressable, Text, View } = require('react-native');
+  return function MockVisitNarrativeSheet({ visible, onExtracted }) {
+    if (!visible) return null;
+    return (
+      <View testID="mock-visit-narrative">
+        <Pressable
+          testID="mock-visit-narrative-extract"
+          onPress={() =>
+            onExtracted?.({
+              fields: { complaints: 'fever', medicines: [] },
+              warnings: [],
+              transcript: 'Patient has fever',
+            })
+          }
+        >
+          <Text>Mock extract</Text>
+        </Pressable>
+      </View>
+    );
+  };
+});
+
+jest.mock('../src/VisitExtractionReviewSheet', () => {
+  const React = require('react');
+  const { Pressable, Text, View } = require('react-native');
+  return function MockVisitExtractionReviewSheet({ visible, onApply, onClose }) {
+    if (!visible) return null;
+    return (
+      <View testID="mock-visit-review">
+        <Pressable
+          testID="mock-visit-review-apply"
+          onPress={() => {
+            onApply?.({
+              fields: { complaints: 'fever', medicines: [] },
+              selection: { complaints: true, medicines: false },
+              transcript: 'Patient has fever',
+            });
+            onClose?.();
+          }}
+        >
+          <Text>Mock apply</Text>
+        </Pressable>
+      </View>
+    );
+  };
+});
+
 function collectRenderedText(node, texts = []) {
   if (typeof node === 'string') {
     texts.push(node);
@@ -70,7 +119,11 @@ describe('PatientVisitsScreen', () => {
       patientBalance: 0,
       familyBalance: 0,
     });
-    getAppSettings.mockResolvedValue({ currencyCode: 'INR' });
+    getAppSettings.mockResolvedValue({
+      currencyCode: 'INR',
+      gemmaModelVariant: 'e2b',
+      gemmaModelDownloaded: false,
+    });
     getMedicines.mockResolvedValue([
       {
         id: 1,
@@ -475,6 +528,21 @@ describe('PatientVisitsScreen', () => {
     fireEvent.press(screen.getByTestId('create-visit-button'));
     await waitFor(() => {
       expect(addVisit).toHaveBeenCalledWith(9, expect.objectContaining({ weightUnit: 'lbs', weight: '160' }));
+    });
+  });
+
+  test('dictate visit opens narrative flow and applies extracted complaints', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByTestId('dictate-visit-button')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('dictate-visit-button'));
+    await waitFor(() => expect(screen.getByTestId('mock-visit-narrative')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('mock-visit-narrative-extract'));
+    await waitFor(() => expect(screen.getByTestId('mock-visit-review')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('mock-visit-review-apply'));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Chief complaints').props.value).toBe('fever');
     });
   });
 });
