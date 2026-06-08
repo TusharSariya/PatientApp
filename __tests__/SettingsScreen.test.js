@@ -5,6 +5,11 @@ import SettingsScreen from '../src/SettingsScreen';
 import { makeNavigation } from './helpers/matrix';
 
 describe('SettingsScreen', () => {
+  test('shows updated gestures settings subtitle', () => {
+    render(<SettingsScreen navigation={makeNavigation()} />);
+    expect(screen.getByText('Symbols, phrases, and shortcuts')).toBeTruthy();
+  });
+
   test.each([
     ['settings-row-report', 'ReportProblem'],
     ['settings-row-clinic', 'ClinicProfile'],

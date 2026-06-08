@@ -11,8 +11,8 @@ import {
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 import { clearDictationOwner } from '../src/dictationOwner';
-import { drawPreset } from './helpers/gesturePadSim';
-import { seedColdGestureRow } from './helpers/seedGestures';
+import { drawPreset, drawStrokes } from './helpers/gesturePadSim';
+import { seedColdGestureRow, seedUriGestureRow, seedUriStreamGestures } from './helpers/seedGestures';
 
 jest.mock('../src/database', () => ({
   getAppSettings: jest.fn(),
@@ -104,6 +104,21 @@ describe('GestureInputProvider', () => {
     expect(getGestures).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Live Field Preview')).toBeTruthy();
     expect(screen.getAllByText('Symptoms').length).toBeGreaterThan(0);
+  });
+
+  test('shows runtime gesture instructions when gestures are available', async () => {
+    renderHarness('Symptoms');
+    await openGestureSheet();
+    expect(screen.getByTestId('gesture-instructions')).toBeTruthy();
+    expect(screen.getByText(/Tap Stream Done to lock text/)).toBeTruthy();
+  });
+
+  test('shows setup prompt when no drawable gestures exist', async () => {
+    getGestures.mockResolvedValue([]);
+    renderHarness('Symptoms');
+    await openGestureSheet();
+    expect(screen.getByTestId('gesture-instructions')).toBeTruthy();
+    expect(screen.getByText(/Settings → Manage Gestures/)).toBeTruthy();
   });
 
   test('gesture default opens sheet when field is focused', async () => {
@@ -211,6 +226,46 @@ describe('GestureInputProvider', () => {
     expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms no cold');
     fireEvent.press(screen.getByTestId('gesture-invert'));
     expect(screen.getByTestId('notes-value').props.children).toBe('Symptoms cold');
+  });
+
+  test('inserts multi-stroke URI shortcut as expanded phrase', async () => {
+    getGestures.mockResolvedValue(seedUriGestureRow());
+    renderHarness('Diagnosis');
+    await openGestureSheet();
+    drawStrokes(screen.getByTestId('gesture-pad'), ['horizontal', 'vertical', 'diagonal']);
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Diagnosis Upper Respiratory Infection');
+    });
+  });
+
+  test('retroactively upgrades U to URI in the open stream segment', async () => {
+    getGestures.mockResolvedValue(seedUriStreamGestures());
+    renderHarness('Diagnosis');
+    await openGestureSheet();
+    drawPreset(screen.getByTestId('gesture-pad'), 'horizontal');
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Diagnosis urine');
+    });
+    drawPreset(screen.getByTestId('gesture-pad'), 'vertical');
+    drawPreset(screen.getByTestId('gesture-pad'), 'diagonal');
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Diagnosis Upper Respiratory Infection');
+    });
+  });
+
+  test('stream done checkpoints open segment before next symbols', async () => {
+    getGestures.mockResolvedValue(seedUriStreamGestures());
+    renderHarness('Diagnosis');
+    await openGestureSheet();
+    drawPreset(screen.getByTestId('gesture-pad'), 'horizontal');
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Diagnosis urine');
+    });
+    fireEvent.press(screen.getByTestId('gesture-stream-done'));
+    drawPreset(screen.getByTestId('gesture-pad'), 'horizontal');
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-value').props.children).toBe('Diagnosis urine urine');
+    });
   });
 
   test('ignores unmatched and invalid gestures without changing field text', async () => {

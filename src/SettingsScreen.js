@@ -42,7 +42,7 @@ const ROWS = [
     key: 'gestures',
     icon: '👋',
     title: 'Manage Gestures',
-    sub: 'Map gestures to words',
+    sub: 'Symbols, phrases, and shortcuts',
     screen: 'ManageGestures',
   },
 ];

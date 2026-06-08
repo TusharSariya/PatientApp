@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { appendRawGesturePoint, buildTouchGesture } from './gestureRecognizer';
@@ -39,15 +39,20 @@ export default function GesturePad({
   fill = false,
   padHeight,
   resetKey = 0,
+  strokeIndex = 0,
+  sessionActive = false,
   onGestureChange,
   onGestureComplete,
+  onStrokeComplete,
   onDrawingChange,
 }) {
   const [layout, setLayout] = useState({ width: 0, height: 0 });
   const [rawPoints, setRawPoints] = useState([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const rawPointsRef = useRef([]);
 
   useEffect(() => {
+    rawPointsRef.current = [];
     setRawPoints([]);
     setIsDrawing(false);
     onDrawingChange?.(false);
@@ -59,7 +64,10 @@ export default function GesturePad({
   function emitGesture(points, complete = false) {
     const gesture = buildTouchGesture(points);
     onGestureChange?.(gesture, points);
-    if (complete) onGestureComplete?.(gesture, points);
+    if (complete) {
+      onGestureComplete?.(gesture, points);
+      onStrokeComplete?.(gesture, points);
+    }
   }
 
   function pushSample(nativeEvent, { restart = false, complete = false } = {}) {
@@ -70,18 +78,16 @@ export default function GesturePad({
       : nativeEvent.changedTouches;
 
     if (!touches?.length) {
-      if (complete) emitGesture(rawPoints, true);
+      if (complete) emitGesture(rawPointsRef.current, true);
       return;
     }
 
     const nextPoint = summarizeTouches(touches, layout);
-
-    setRawPoints(previousPoints => {
-      const basePoints = restart ? [] : previousPoints;
-      const nextPoints = appendRawGesturePoint(basePoints, nextPoint);
-      emitGesture(nextPoints, complete);
-      return nextPoints;
-    });
+    const basePoints = restart ? [] : rawPointsRef.current;
+    const nextPoints = appendRawGesturePoint(basePoints, nextPoint);
+    rawPointsRef.current = nextPoints;
+    setRawPoints(nextPoints);
+    emitGesture(nextPoints, complete);
   }
 
   function handleGrant(event) {
@@ -134,7 +140,9 @@ export default function GesturePad({
             <Text style={styles.emptySub}>
               {disabled
                 ? 'Add a new touch gesture first.'
-                : 'Use one or more fingers. Lift them to finish.'}
+                : sessionActive
+                  ? `Stroke ${strokeIndex + 1} — draw, then lift to add the next stroke.`
+                  : 'Use one or more fingers. Lift to finish each stroke.'}
             </Text>
           </View>
         ) : null}

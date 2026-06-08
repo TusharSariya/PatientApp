@@ -919,6 +919,9 @@ describe('database', () => {
     const db = createMockDb();
     db.getAllAsync.mockImplementation(async (sql) => {
       if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('PRAGMA table_info(gestures)')) {
+        return [{ name: 'id' }, { name: 'word' }, { name: 'data' }, { name: 'code' }, { name: 'kind' }, { name: 'symbol' }];
+      }
       if (sql.includes('FROM gestures')) return [{ id: 1, word: 'cold', data: '{}' }];
       return [];
     });
@@ -926,18 +929,29 @@ describe('database', () => {
     const { database } = await loadDatabaseModule({ dev: false, db });
 
     const gestures = await database.getGestures();
-    const id = await database.addGesture('cold', '{}');
-    await database.deleteGesture(id);
+    const glyphId = await database.addGlyphGesture('U', '{"kind":"touch-path-v1"}');
+    const expansionId = await database.addExpansion('URI', 'Upper Respiratory Infection');
+    await database.deleteGesture(glyphId);
+    await database.deleteGesture(expansionId);
 
     expect(gestures).toEqual([{ id: 1, word: 'cold', data: '{}' }]);
-    expect(id).toBe(5);
-    expect(db.runAsync).toHaveBeenNthCalledWith(
-      1,
+    expect(glyphId).toBe(5);
+    expect(expansionId).toBe(5);
+    expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO gestures'),
-      ['cold', '{}']
+      ['', '{"kind":"touch-path-v1"}', null, 'glyph', 'U']
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO gestures'),
+      ['Upper Respiratory Infection', '{}', 'URI', 'expansion', null]
     );
     expect(db.runAsync).toHaveBeenNthCalledWith(
-      2,
+      3,
+      expect.stringContaining('DELETE FROM gestures'),
+      [5]
+    );
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      4,
       expect.stringContaining('DELETE FROM gestures'),
       [5]
     );

@@ -46,6 +46,20 @@ describe('InputModeSettingsScreen', () => {
     expect(saveAppSettings).not.toHaveBeenCalled();
   });
 
+  test('shows gesture setup note when gestures mode is selected', async () => {
+    render(<InputModeSettingsScreen />);
+    await waitFor(() => expect(screen.getByTestId('gesture-input-mode-note')).toBeTruthy());
+    expect(screen.getByText(/Settings → Manage Gestures/)).toBeTruthy();
+    expect(screen.getByText(/Use Stream Done while writing/)).toBeTruthy();
+  });
+
+  test('hides gesture setup note when another input mode is selected', async () => {
+    getAppSettings.mockResolvedValue({ currencyCode: 'INR', defaultInputMode: 'keyboard' });
+    render(<InputModeSettingsScreen />);
+    await waitFor(() => expect(screen.getByText('Keyboard')).toBeTruthy());
+    expect(screen.queryByTestId('gesture-input-mode-note')).toBeNull();
+  });
+
   test('shows save error alert', async () => {
     saveAppSettings.mockRejectedValue(new Error('fail'));
     render(<InputModeSettingsScreen />);

@@ -1,8 +1,13 @@
 import {
   appendRawGesturePoint,
   buildTouchGesture,
+  buildTouchSequence,
+  findPossibleContinuation,
+  isGestureData,
   isTouchGestureData,
   matchGesture,
+  matchGestureSequence,
+  parseGestureSequence,
 } from '../src/gestureRecognizer';
 
 function makeRawPath({
@@ -82,6 +87,76 @@ describe('gestureRecognizer', () => {
       expect(isTouchGestureData(null)).toBe(false);
       expect(isTouchGestureData('{bad-json')).toBe(false);
       expect(isTouchGestureData(JSON.stringify({ kind: 'unknown', points: [] }))).toBe(false);
+    });
+  });
+
+  describe('parseGestureSequence', () => {
+    test('wraps legacy touch-path-v1 as a one-stroke sequence', () => {
+      const gesture = buildTouchGesture(makeRawPath({ count: 24, stepX: 10 }));
+      const sequence = parseGestureSequence(JSON.stringify(gesture));
+      expect(sequence?.kind).toBe('touch-sequence-v1');
+      expect(sequence?.strokes).toHaveLength(1);
+      expect(sequence?.strokes[0].kind).toBe('touch-path-v1');
+    });
+
+    test('parses touch-sequence-v1 payloads', () => {
+      const strokes = [
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 10 })),
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 0, stepY: 10 })),
+      ];
+      const sequence = buildTouchSequence(strokes);
+      const parsed = parseGestureSequence(JSON.stringify(sequence));
+      expect(parsed?.strokes).toHaveLength(2);
+    });
+  });
+
+  describe('isGestureData', () => {
+    test('accepts legacy and sequence gesture payloads', () => {
+      const legacy = buildTouchGesture(makeRawPath({ count: 24, stepX: 10 }));
+      const sequence = buildTouchSequence([
+        legacy,
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 0, stepY: 10 })),
+      ]);
+      expect(isGestureData(JSON.stringify(legacy))).toBe(true);
+      expect(isGestureData(JSON.stringify(sequence))).toBe(true);
+      expect(isGestureData(null)).toBe(false);
+    });
+  });
+
+  describe('matchGestureSequence', () => {
+    test('matches a three-stroke URI gesture sequence', () => {
+      const strokeU = buildTouchGesture(makeRawPath({ count: 24, stepX: 10 }));
+      const strokeR = buildTouchGesture(makeRawPath({ count: 24, stepX: 0, stepY: 10 }));
+      const strokeI = buildTouchGesture(makeRawPath({ count: 24, stepX: 8, stepY: 8 }));
+      const stored = buildTouchSequence([strokeU, strokeR, strokeI]);
+      const gestures = [{
+        id: 1,
+        code: 'URI',
+        word: 'Upper Respiratory Infection',
+        data: JSON.stringify(stored),
+      }];
+
+      const recorded = [
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 10, stepY: 1 })),
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 1, stepY: 10 })),
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 8, stepY: 9 })),
+      ];
+
+      const result = matchGestureSequence(recorded, gestures);
+      expect(result).toEqual(gestures[0]);
+    });
+
+    test('returns null for partial sequence with no exact-length match', () => {
+      const strokeU = buildTouchGesture(makeRawPath({ count: 24, stepX: 10 }));
+      const stored = buildTouchSequence([
+        strokeU,
+        buildTouchGesture(makeRawPath({ count: 24, stepX: 0, stepY: 10 })),
+      ]);
+      const gestures = [{ id: 1, word: 'Two', data: JSON.stringify(stored) }];
+      const recorded = [buildTouchGesture(makeRawPath({ count: 24, stepX: 10, stepY: 1 }))];
+
+      expect(matchGestureSequence(recorded, gestures)).toBeNull();
+      expect(findPossibleContinuation(recorded, gestures)).toBe(true);
     });
   });
 

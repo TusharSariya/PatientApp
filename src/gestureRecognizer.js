@@ -1,4 +1,5 @@
 const GESTURE_KIND = 'touch-path-v1';
+const SEQUENCE_KIND = 'touch-sequence-v1';
 const RESAMPLED_POINT_COUNT = 48;
 const MIN_GESTURE_POINTS = 6;
 const MIN_GESTURE_EXTENT = 18;
@@ -243,6 +244,116 @@ export function buildTouchGesture(rawPoints) {
 
 export function isTouchGestureData(data) {
   return Boolean(parseGestureData(data));
+}
+
+function parseGestureSequenceObject(parsed) {
+  if (!parsed) return null;
+
+  if (parsed.kind === SEQUENCE_KIND && Array.isArray(parsed.strokes)) {
+    const strokes = parsed.strokes
+      .map(stroke => normalizeGestureObject(stroke))
+      .filter(Boolean);
+    if (strokes.length === 0) return null;
+    return { kind: SEQUENCE_KIND, strokes };
+  }
+
+  const legacyStroke = normalizeGestureObject(parsed);
+  if (legacyStroke) {
+    return { kind: SEQUENCE_KIND, strokes: [legacyStroke] };
+  }
+
+  return null;
+}
+
+export function parseGestureSequence(data) {
+  if (!data) return null;
+
+  const parsed = typeof data === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return null;
+        }
+      })()
+    : data;
+
+  return parseGestureSequenceObject(parsed);
+}
+
+export function buildTouchSequence(strokes) {
+  if (!Array.isArray(strokes) || strokes.length === 0) return null;
+
+  const normalizedStrokes = strokes
+    .map(stroke => parseGestureData(stroke))
+    .filter(Boolean);
+
+  if (normalizedStrokes.length !== strokes.length) return null;
+
+  return {
+    kind: SEQUENCE_KIND,
+    strokes: normalizedStrokes,
+  };
+}
+
+export function isGestureData(data) {
+  return Boolean(parseGestureSequence(data));
+}
+
+export function sequenceDistance(userStrokes, storedStrokes) {
+  if (!userStrokes?.length || userStrokes.length !== storedStrokes?.length) {
+    return Infinity;
+  }
+
+  let total = 0;
+  for (let i = 0; i < userStrokes.length; i += 1) {
+    total += gestureDistance(userStrokes[i], storedStrokes[i]);
+  }
+
+  return total / userStrokes.length;
+}
+
+export function findPossibleContinuation(userStrokes, gestures, threshold = 0.24) {
+  if (!Array.isArray(userStrokes) || userStrokes.length === 0 || !Array.isArray(gestures)) {
+    return false;
+  }
+
+  return gestures.some(gesture => {
+    const sequence = parseGestureSequence(gesture.data ?? gesture);
+    if (!sequence || sequence.strokes.length <= userStrokes.length) return false;
+    return sequenceDistance(userStrokes, sequence.strokes.slice(0, userStrokes.length)) < threshold;
+  });
+}
+
+export function getMaxGestureStrokeCount(gestures) {
+  if (!Array.isArray(gestures) || gestures.length === 0) return 0;
+
+  return gestures.reduce((max, gesture) => {
+    const sequence = parseGestureSequence(gesture.data ?? gesture);
+    return Math.max(max, sequence?.strokes.length ?? 0);
+  }, 0);
+}
+
+export function matchGestureSequence(userStrokes, gestures, threshold = 0.24) {
+  if (!Array.isArray(userStrokes) || userStrokes.length === 0 || !Array.isArray(gestures) || gestures.length === 0) {
+    return null;
+  }
+
+  let best = null;
+  let bestScore = Infinity;
+
+  for (const gesture of gestures) {
+    const sequence = parseGestureSequence(gesture.data ?? gesture);
+    if (!sequence || sequence.strokes.length !== userStrokes.length) continue;
+
+    const score = sequenceDistance(userStrokes, sequence.strokes);
+    if (score < bestScore) {
+      bestScore = score;
+      best = gesture;
+    }
+  }
+
+  return bestScore < threshold ? best : null;
 }
 
 export function matchGesture(recordedGesture, gestures, threshold = 0.24) {

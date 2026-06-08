@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { getAppSettings, saveAppSettings } from './database';
+import { GESTURE_INPUT_MODE_NOTE } from './gestureInstructions';
 import { INPUT_MODES } from './inputMode';
 import { flatPressableRow, flatSection, flatSelectedRow, screenColors, screenContent } from './screenLayout';
 
@@ -57,6 +58,11 @@ export default function InputModeSettingsScreen() {
       <Text style={styles.intro}>
         Choose what opens first when supported text fields are focused.
       </Text>
+      {defaultInputMode === 'gestures' ? (
+        <Text style={styles.note} testID="gesture-input-mode-note">
+          {GESTURE_INPUT_MODE_NOTE}
+        </Text>
+      ) : null}
       <View style={styles.optionsSection}>
         {INPUT_MODES.map((mode, index) => {
           const selected = mode.id === defaultInputMode;
@@ -101,6 +107,12 @@ const styles = StyleSheet.create({
     color: '#5f6d8a',
     marginBottom: 16,
     lineHeight: 20,
+  },
+  note: {
+    fontSize: 13,
+    color: '#999',
+    lineHeight: 18,
+    marginBottom: 16,
   },
   optionsSection: flatSection(),
   rowText: {

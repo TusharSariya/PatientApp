@@ -18,7 +18,15 @@ import {
 import { getAppSettings, getGestures, subscribeAppSettings } from './database';
 import { clearDictationOwner, getDictationOwner, setDictationOwner } from './dictationOwner';
 import GesturePad from './GesturePad';
-import { isTouchGestureData, matchGesture } from './gestureRecognizer';
+import { GESTURE_OVERLAY_HINT_EMPTY, GESTURE_OVERLAY_HINT_READY } from './gestureInstructions';
+import {
+  applyOpenSegment,
+  buildSymbolBuffer,
+  hasDrawableGestures,
+  matchGlyphStroke,
+  partitionGestures,
+  resolveStreamOutput,
+} from './gestureStreamResolver';
 import { DEFAULT_INPUT_MODE } from './inputMode';
 import { SCREEN_PADDING, screenColors } from './screenLayout';
 
@@ -122,6 +130,9 @@ export function GestureInputProvider({ children }) {
   const [padResetKey, setPadResetKey] = useState(0);
   const [resultState, setResultState] = useState('idle');
   const [lastMatchedWord, setLastMatchedWord] = useState('');
+  const [strokeSessionCount, setStrokeSessionCount] = useState(0);
+  const [symbolBuffer, setSymbolBuffer] = useState('');
+  const [streamPreview, setStreamPreview] = useState('');
   const [fieldPreviewText, setFieldPreviewText] = useState('');
   const [canUndo, setCanUndo] = useState(false);
   const [lastInsertion, setLastInsertion] = useState(null);
@@ -137,6 +148,11 @@ export function GestureInputProvider({ children }) {
   const swipeStartYRef = useRef(null);
   const dictationSessionRef = useRef(false);
   const lastDictationTranscriptRef = useRef('');
+  const strokeSessionRef = useRef([]);
+  const streamStrokeSymbolsRef = useRef([]);
+  const symbolBufferRef = useRef('');
+  const checkpointIndexRef = useRef(0);
+  const partitionedGesturesRef = useRef({ glyphs: [], expansions: [], sequences: [] });
   const dictationOwner = 'gesture-overlay';
 
   useEffect(() => {
@@ -184,7 +200,8 @@ export function GestureInputProvider({ children }) {
       try {
         const rows = await getGestures();
         if (!active) return;
-        setGestures(rows.filter(gesture => isTouchGestureData(gesture.data)));
+        setGestures(rows);
+        partitionedGesturesRef.current = partitionGestures(rows);
       } catch {
         if (active) setGestures([]);
       } finally {
@@ -210,6 +227,85 @@ export function GestureInputProvider({ children }) {
     historyRef.current = [];
     setCanUndo(false);
     setLastInsertion(null);
+  }
+
+  function clearStrokeSession() {
+    strokeSessionRef.current = [];
+    streamStrokeSymbolsRef.current = [];
+    symbolBufferRef.current = '';
+    setStrokeSessionCount(0);
+    setSymbolBuffer('');
+    setStreamPreview('');
+  }
+
+  function syncCheckpointFromField(field = activeFieldRef.current) {
+    if (!field) return;
+    const value = field.getValue?.() ?? '';
+    const selection = cloneSelection(
+      field.getSelection?.() ?? getDefaultSelection(value),
+      value
+    );
+    checkpointIndexRef.current = selection.start;
+  }
+
+  function applyStreamResult(resolved) {
+    const field = activeFieldRef.current;
+    if (!field || !resolved?.output) return null;
+
+    const currentValue = field.getValue?.() ?? '';
+    const currentSelection = cloneSelection(
+      field.getSelection?.() ?? getDefaultSelection(currentValue),
+      currentValue
+    );
+    const applied = applyOpenSegment({
+      text: currentValue,
+      checkpointIndex: checkpointIndexRef.current,
+      output: resolved.output,
+    });
+
+    field.setValue?.(applied.text);
+    field.setSelection?.(applied.selection);
+
+    historyRef.current.push({
+      beforeText: currentValue,
+      beforeSelection: currentSelection,
+      lastInsertionBefore: lastInsertion,
+      lastInsertionAfter: { word: resolved.output, range: applied.openRange },
+      streamStrokeCount: strokeSessionRef.current.length,
+      streamSymbols: [...streamStrokeSymbolsRef.current],
+    });
+
+    setCanUndo(historyRef.current.length > 0);
+    setLastInsertion({ word: resolved.output, range: applied.openRange });
+    setLastMatchedWord(resolved.output);
+    setStreamPreview(resolved.output);
+    setFieldPreviewText(applied.text);
+    return applied;
+  }
+
+  function reapplyStreamFromBuffers() {
+    const resolved = resolveStreamOutput({
+      symbolBuffer: symbolBufferRef.current,
+      strokeSession: strokeSessionRef.current,
+      ...partitionedGesturesRef.current,
+    });
+
+    const field = activeFieldRef.current;
+    if (!field) return;
+
+    if (!resolved) {
+      const currentValue = field.getValue?.() ?? '';
+      const trimmed = currentValue.slice(0, checkpointIndexRef.current);
+      field.setValue?.(trimmed);
+      field.setSelection?.({ start: trimmed.length, end: trimmed.length });
+      setLastInsertion(null);
+      setLastMatchedWord('');
+      setStreamPreview('');
+      setFieldPreviewText(trimmed);
+      return;
+    }
+
+    applyStreamResult(resolved);
   }
 
   function clearDictationSession() {
@@ -251,6 +347,7 @@ export function GestureInputProvider({ children }) {
       setFieldPreviewText('');
       setPadResetKey(previous => previous + 1);
       resetGestureHistory();
+      clearStrokeSession();
     }
   }
 
@@ -265,6 +362,8 @@ export function GestureInputProvider({ children }) {
     setFieldPreviewText(field.getValue?.() ?? '');
     setIsDrawing(false);
     resetGestureHistory();
+    clearStrokeSession();
+    syncCheckpointFromField(field);
     sheetTranslateY.setValue(0);
     setOverlayVisible(true);
     Keyboard.dismiss();
@@ -278,6 +377,7 @@ export function GestureInputProvider({ children }) {
     setLastMatchedWord('');
     setIsDrawing(false);
     setPadResetKey(previous => previous + 1);
+    clearStrokeSession();
   }
 
   function closeOverlay({ blurField = true } = {}) {
@@ -288,6 +388,7 @@ export function GestureInputProvider({ children }) {
     resetOverlayState();
     setFieldPreviewText('');
     resetGestureHistory();
+    clearStrokeSession();
 
     if (blurField) {
       const field = activeFieldRef.current;
@@ -351,7 +452,21 @@ export function GestureInputProvider({ children }) {
 
   function handleUndoGesture() {
     const field = activeFieldRef.current;
-    if (!field || historyRef.current.length === 0) return;
+    if (!field) return;
+
+    if (strokeSessionRef.current.length > 0) {
+      strokeSessionRef.current = strokeSessionRef.current.slice(0, -1);
+      streamStrokeSymbolsRef.current = streamStrokeSymbolsRef.current.slice(0, -1);
+      symbolBufferRef.current = buildSymbolBuffer(streamStrokeSymbolsRef.current);
+      setStrokeSessionCount(strokeSessionRef.current.length);
+      setSymbolBuffer(symbolBufferRef.current);
+      reapplyStreamFromBuffers();
+      setResultState('ready');
+      setPadResetKey(previousKey => previousKey + 1);
+      return;
+    }
+
+    if (historyRef.current.length === 0) return;
 
     const previous = historyRef.current.pop();
     field.setValue?.(previous.beforeText);
@@ -409,27 +524,73 @@ export function GestureInputProvider({ children }) {
     if (drawing) setResultState('ready');
   }
 
-  function handleGestureComplete(gesture) {
+  function handleStrokeComplete(stroke) {
     setIsDrawing(false);
 
-    if (!gesture) {
+    if (!stroke) {
       setLastMatchedWord('');
       setResultState('invalid');
       return;
     }
 
-    const match = matchGesture(gesture, gestures);
-    if (!match) {
+    const { glyphs, expansions, sequences } = partitionedGesturesRef.current;
+    const glyphSymbol = matchGlyphStroke(stroke, glyphs);
+    const nextSession = [...strokeSessionRef.current, stroke];
+    const nextSymbols = [...streamStrokeSymbolsRef.current, glyphSymbol];
+
+    strokeSessionRef.current = nextSession;
+    streamStrokeSymbolsRef.current = nextSymbols;
+    symbolBufferRef.current = buildSymbolBuffer(nextSymbols);
+    setStrokeSessionCount(nextSession.length);
+    setSymbolBuffer(symbolBufferRef.current);
+
+    const resolved = resolveStreamOutput({
+      symbolBuffer: symbolBufferRef.current,
+      strokeSession: nextSession,
+      glyphs,
+      expansions,
+      sequences,
+    });
+
+    if (resolved) {
+      applyStreamResult(resolved);
+      setResultState('inserted');
+    } else if (!glyphSymbol) {
       setLastMatchedWord('');
+      setStreamPreview('');
       setResultState('no-match');
-      return;
+    } else {
+      setResultState('ready');
     }
 
-    const inserted = insertMatchedWord(match.word);
-    if (!inserted) return;
-    setLastMatchedWord(inserted.insertedWord);
-    setResultState('inserted');
     setPadResetKey(previous => previous + 1);
+  }
+
+  function clearStrokeSequence() {
+    const field = activeFieldRef.current;
+    if (field) {
+      const trimmed = (field.getValue?.() ?? '').slice(0, checkpointIndexRef.current);
+      field.setValue?.(trimmed);
+      field.setSelection?.({ start: trimmed.length, end: trimmed.length });
+      setFieldPreviewText(trimmed);
+    }
+    clearStrokeSession();
+    setLastMatchedWord('');
+    setLastInsertion(null);
+    setResultState('ready');
+    setPadResetKey(previous => previous + 1);
+  }
+
+  function handleStreamDone() {
+    const field = activeFieldRef.current;
+    if (!field) return;
+
+    const currentValue = field.getValue?.() ?? '';
+    checkpointIndexRef.current = currentValue.length;
+    clearStrokeSession();
+    setResultState('committed');
+    setPadResetKey(previous => previous + 1);
+    setTimeout(() => setResultState('ready'), 300);
   }
 
   async function handleDictationPress() {
@@ -531,7 +692,7 @@ export function GestureInputProvider({ children }) {
     resetSheetPosition();
   }
 
-  const hasGestures = gestures.length > 0;
+  const hasGestures = hasDrawableGestures(gestures);
 
   return (
     <GestureInputContext.Provider value={{ focusField, blurField, releaseField, openFieldOverlay, defaultInputMode }}>
@@ -566,6 +727,12 @@ export function GestureInputProvider({ children }) {
                   <Text style={styles.closeButtonText}>Close</Text>
                 </TouchableOpacity>
               </View>
+
+              {!loadingGestures ? (
+                <Text style={styles.instructions} testID="gesture-instructions">
+                  {hasGestures ? GESTURE_OVERLAY_HINT_READY : GESTURE_OVERLAY_HINT_EMPTY}
+                </Text>
+              ) : null}
   
               {loadingGestures ? (
                 <ActivityIndicator size="large" color="#4f6ef7" style={styles.loader} />
@@ -576,6 +743,11 @@ export function GestureInputProvider({ children }) {
                     <Text style={styles.previewText}>
                       {fieldPreviewText || 'Nothing inserted yet.'}
                     </Text>
+                    {symbolBuffer ? (
+                      <Text style={styles.streamHint} testID="gesture-stream-buffer">
+                        Stream: {symbolBuffer}{streamPreview ? ` → ${streamPreview}` : ''}
+                      </Text>
+                    ) : null}
                   </View>
 
                   <View style={styles.gesturePadSlot}>
@@ -583,14 +755,41 @@ export function GestureInputProvider({ children }) {
                       disabled={!hasGestures}
                       fill
                       resetKey={padResetKey}
-                      onGestureComplete={handleGestureComplete}
+                      strokeIndex={strokeSessionCount}
+                      sessionActive={strokeSessionCount > 0}
+                      onStrokeComplete={handleStrokeComplete}
                       onDrawingChange={handleDrawingChange}
                     />
                   </View>
 
                   <View style={styles.actionGrid}>
-                    <TouchableOpacity testID="gesture-undo" style={styles.secondaryButton} onPress={handleUndoGesture} disabled={!canUndo}>
-                      <Text style={[styles.secondaryButtonText, !canUndo && styles.buttonTextDisabled]}>Undo Gesture</Text>
+                    <TouchableOpacity
+                      testID="gesture-stream-done"
+                      style={styles.primaryButton}
+                      onPress={handleStreamDone}
+                      disabled={strokeSessionCount === 0 && !streamPreview}
+                    >
+                      <Text style={[styles.primaryButtonText, strokeSessionCount === 0 && !streamPreview && styles.buttonTextDisabled]}>
+                        Stream Done
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      testID="gesture-clear-sequence"
+                      style={styles.secondaryButton}
+                      onPress={clearStrokeSequence}
+                      disabled={strokeSessionCount === 0}
+                    >
+                      <Text style={[styles.secondaryButtonText, strokeSessionCount === 0 && styles.buttonTextDisabled]}>
+                        Clear Stream
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      testID="gesture-undo"
+                      style={styles.secondaryButton}
+                      onPress={handleUndoGesture}
+                      disabled={strokeSessionCount === 0 && !canUndo}
+                    >
+                      <Text style={[styles.secondaryButtonText, strokeSessionCount === 0 && !canUndo && styles.buttonTextDisabled]}>Undo Gesture</Text>
                     </TouchableOpacity>
                     <TouchableOpacity testID="gesture-invert" style={styles.secondaryButton} onPress={handleInvertGesture} disabled={!lastInsertion}>
                       <Text style={[styles.secondaryButtonText, !lastInsertion && styles.buttonTextDisabled]}>Invert Gesture</Text>
@@ -761,6 +960,13 @@ const styles = StyleSheet.create({
     color: '#7d8597',
     marginBottom: 4,
   },
+  instructions: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#666',
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
   closeButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -796,6 +1002,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     color: '#1a1a2e',
+  },
+  streamHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#4f6ef7',
+    marginTop: 8,
+    fontWeight: '600',
   },
   gesturePadSlot: {
     flex: 1,

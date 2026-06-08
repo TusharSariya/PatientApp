@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,14 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import GesturePad from './GesturePad';
 import { getGestures } from './database';
-import { isTouchGestureData, matchGesture } from './gestureRecognizer';
+import { GESTURE_TEST_WALKTHROUGH } from './gestureInstructions';
+import {
+  buildSymbolBuffer,
+  hasDrawableGestures,
+  matchGlyphStroke,
+  partitionGestures,
+  resolveStreamOutput,
+} from './gestureStreamResolver';
 import { flatSection, screenColors, screenContent } from './screenLayout';
 
 export default function TestGestureScreen() {
@@ -20,8 +27,14 @@ export default function TestGestureScreen() {
   const [loading, setLoading] = useState(true);
   const [padResetKey, setPadResetKey] = useState(0);
   const [resultState, setResultState] = useState('idle');
-  const [result, setResult] = useState(null);
+  const [resolved, setResolved] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [strokeSessionCount, setStrokeSessionCount] = useState(0);
+  const [symbolBuffer, setSymbolBuffer] = useState('');
+  const [committedOutput, setCommittedOutput] = useState('');
+  const strokeSessionRef = useRef([]);
+  const streamStrokeSymbolsRef = useRef([]);
+  const partitionedRef = useRef({ glyphs: [], expansions: [], sequences: [] });
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -32,6 +45,7 @@ export default function TestGestureScreen() {
         const rows = await getGestures();
         if (!active) return;
         setGestures(rows);
+        partitionedRef.current = partitionGestures(rows);
       } catch (error) {
         if (!active) return;
         Alert.alert('Could not load gestures', String(error?.message ?? error));
@@ -47,49 +61,111 @@ export default function TestGestureScreen() {
     };
   }, []));
 
-  const compatibleGestures = gestures.filter(gesture => isTouchGestureData(gesture.data));
-
-  function handleDrawingChange(isDrawing) {
-    setIsDrawing(isDrawing);
-    if (isDrawing) setResult(null);
+  function clearStrokeSession() {
+    strokeSessionRef.current = [];
+    streamStrokeSymbolsRef.current = [];
+    setStrokeSessionCount(0);
+    setSymbolBuffer('');
+    setResolved(null);
   }
 
-  function handleGestureComplete(gesture) {
+  function handleDrawingChange(drawing) {
+    setIsDrawing(drawing);
+    if (drawing) setResultState('ready');
+  }
+
+  function handleStrokeComplete(stroke) {
     setIsDrawing(false);
-    if (!gesture) {
+    if (!stroke) {
       setResultState('invalid');
-      setResult(null);
       return;
     }
 
-    const match = matchGesture(gesture, compatibleGestures);
-    setResult(match);
-    setResultState(match ? 'match' : 'no-match');
+    const { glyphs, expansions, sequences } = partitionedRef.current;
+    const glyphSymbol = matchGlyphStroke(stroke, glyphs);
+    const nextSession = [...strokeSessionRef.current, stroke];
+    const nextSymbols = [...streamStrokeSymbolsRef.current, glyphSymbol];
+    const nextBuffer = buildSymbolBuffer(nextSymbols);
+
+    strokeSessionRef.current = nextSession;
+    streamStrokeSymbolsRef.current = nextSymbols;
+    setStrokeSessionCount(nextSession.length);
+    setSymbolBuffer(nextBuffer);
+
+    const nextResolved = resolveStreamOutput({
+      symbolBuffer: nextBuffer,
+      strokeSession: nextSession,
+      glyphs,
+      expansions,
+      sequences,
+    });
+
+    if (nextResolved) {
+      setResolved(nextResolved);
+      setResultState('match');
+    } else if (!glyphSymbol) {
+      setResolved(null);
+      setResultState('no-match');
+    } else {
+      setResolved(null);
+      setResultState('ready');
+    }
+
+    setPadResetKey((previous) => previous + 1);
+  }
+
+  function handleStreamDone() {
+    if (resolved?.output) {
+      const nextCommitted = committedOutput
+        ? `${committedOutput} ${resolved.output}`
+        : resolved.output;
+      setCommittedOutput(nextCommitted);
+    }
+    clearStrokeSession();
+    setResultState('committed');
+    setPadResetKey((previous) => previous + 1);
+    setTimeout(() => setResultState('idle'), 300);
   }
 
   function handleClear() {
-    setPadResetKey(previous => previous + 1);
+    setPadResetKey((previous) => previous + 1);
     setResultState('idle');
-    setResult(null);
     setIsDrawing(false);
+    clearStrokeSession();
+    setCommittedOutput('');
   }
 
-  const hasCompatibleGestures = compatibleGestures.length > 0;
+  function formatResolvedLabel(value) {
+    if (!value) return '';
+    if (value.code && value.output) {
+      return `${value.code} → ${value.output}`;
+    }
+    return value.output || '';
+  }
+
+  const hasCompatibleGestures = hasDrawableGestures(gestures);
 
   return (
     <ScrollView contentContainerStyle={styles.container} scrollEnabled={!isDrawing}>
       <View style={styles.heroCard}>
         <Text style={styles.heroEyebrow}>Touch Gesture Recognition</Text>
-        <Text style={styles.heroTitle}>Draw a saved gesture to reveal its associated word.</Text>
+        <Text style={styles.heroTitle}>Test symbol streams and phrase expansion.</Text>
         <Text style={styles.heroSub}>
           {loading
             ? 'Loading saved gestures...'
-            : compatibleGestures.length > 0
-              ? `Ready to test against ${compatibleGestures.length} touch gesture${compatibleGestures.length === 1 ? '' : 's'}.`
-              : gestures.length > 0
-                ? 'Your saved gestures use the old motion format. Re-record them with finger gestures first.'
-                : 'No gestures saved yet. Add one from Manage Gestures first.'}
+            : hasCompatibleGestures
+              ? 'Practice symbol streams and phrase expansion below.'
+              : 'Add symbols or shortcuts from Manage Gestures first.'}
         </Text>
+        {!loading && hasCompatibleGestures ? (
+          <View style={styles.heroSteps} testID="gesture-test-walkthrough">
+            {GESTURE_TEST_WALKTHROUGH.map((step, index) => (
+              <Text key={step} style={styles.heroStep}>
+                {`${index + 1}. ${step}`}
+              </Text>
+            ))}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.panel}>
@@ -101,7 +177,9 @@ export default function TestGestureScreen() {
             <GesturePad
               disabled={!hasCompatibleGestures}
               resetKey={padResetKey}
-              onGestureComplete={handleGestureComplete}
+              strokeIndex={strokeSessionCount}
+              sessionActive={strokeSessionCount > 0}
+              onStrokeComplete={handleStrokeComplete}
               onDrawingChange={handleDrawingChange}
             />
 
@@ -112,23 +190,26 @@ export default function TestGestureScreen() {
                 (resultState === 'no-match' || resultState === 'invalid') && styles.resultNone,
               ]}
             >
-              <Text
-                style={[
-                  styles.resultLabel,
-                  resultState === 'match' && styles.resultLabelMatch,
-                  (resultState === 'no-match' || resultState === 'invalid') && styles.resultLabelWarn,
-                ]}
-              >
+              <Text style={[styles.resultLabel, resultState === 'match' && styles.resultLabelMatch]}>
                 {isDrawing
                   ? 'Drawing'
                   : resultState === 'match'
-                    ? 'Associated Word'
-                    : resultState === 'no-match'
-                      ? 'No Matching Gesture'
-                      : resultState === 'invalid'
-                        ? 'Gesture Too Small'
-                        : 'Ready'}
+                    ? 'Resolved'
+                    : strokeSessionCount > 0
+                      ? `Stroke ${strokeSessionCount}`
+                      : resultState === 'committed'
+                        ? 'Checkpoint Saved'
+                        : resultState === 'no-match'
+                          ? 'No Match'
+                          : resultState === 'invalid'
+                            ? 'Stroke Too Small'
+                            : 'Ready'}
               </Text>
+              {symbolBuffer ? (
+                <Text style={styles.streamBuffer} testID="test-gesture-stream-buffer">
+                  Stream: {symbolBuffer}
+                </Text>
+              ) : null}
               <Text
                 style={[
                   styles.resultBody,
@@ -137,21 +218,29 @@ export default function TestGestureScreen() {
                 ]}
               >
                 {isDrawing
-                  ? 'Finish the gesture by lifting your fingers.'
+                  ? 'Finish the stroke by lifting your fingers.'
                   : resultState === 'match'
-                    ? result.word
-                    : resultState === 'no-match'
-                      ? 'Try again with a clearer or more consistent touch path.'
-                      : resultState === 'invalid'
-                        ? 'Draw a larger gesture before lifting your fingers.'
+                    ? formatResolvedLabel(resolved)
+                    : committedOutput
+                      ? `Committed: ${committedOutput}`
+                      : strokeSessionCount > 0
+                        ? 'Keep drawing symbols or tap Stream Done to checkpoint.'
                         : hasCompatibleGestures
-                          ? 'Draw inside the pad to test a saved gesture.'
-                          : 'Add at least one touch gesture to start testing.'}
+                          ? 'Draw inside the pad to start a symbol stream.'
+                          : 'Add at least one symbol or shortcut to start testing.'}
               </Text>
             </View>
 
-            <View style={styles.linkSlot}>
-              {(resultState !== 'idle' || isDrawing) ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                testID="test-gesture-stream-done"
+                style={styles.primaryAction}
+                onPress={handleStreamDone}
+                disabled={!resolved?.output}
+              >
+                <Text style={styles.primaryActionText}>Stream Done</Text>
+              </TouchableOpacity>
+              {(resultState !== 'idle' || isDrawing || strokeSessionCount > 0 || committedOutput) ? (
                 <TouchableOpacity onPress={handleClear}>
                   <Text style={styles.secondaryLink}>Clear Result</Text>
                 </TouchableOpacity>
@@ -195,6 +284,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: 'rgba(255,255,255,0.82)',
   },
+  heroSteps: {
+    marginTop: 12,
+    gap: 6,
+  },
+  heroStep: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.78)',
+  },
   panel: flatSection({ paddingVertical: 16 }),
   sectionTitle: {
     fontSize: 18,
@@ -227,8 +325,11 @@ const styles = StyleSheet.create({
   resultLabelMatch: {
     color: '#27ae60',
   },
-  resultLabelWarn: {
-    color: '#e67e22',
+  streamBuffer: {
+    fontSize: 13,
+    color: '#4f6ef7',
+    fontWeight: '600',
+    marginTop: 8,
   },
   resultBody: {
     fontSize: 15,
@@ -241,12 +342,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#eafaf1',
   },
   resultWord: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '800',
     color: '#1a1a2e',
     marginTop: 6,
     textAlign: 'center',
-    lineHeight: 40,
+    lineHeight: 34,
   },
   resultNone: {
     backgroundColor: '#fef9f0',
@@ -258,15 +359,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  linkSlot: {
-    minHeight: 28,
-    justifyContent: 'center',
+  actionRow: {
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 10,
+  },
+  primaryAction: {
+    backgroundColor: '#4f6ef7',
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  primaryActionText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
   secondaryLink: {
     color: '#4f6ef7',
     fontWeight: '600',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 14,
   },
 });

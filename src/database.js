@@ -293,6 +293,20 @@ async function ensureAppSettingsSchema(database) {
   }
 }
 
+async function ensureGesturesSchema(database) {
+  const columns = await database.getAllAsync('PRAGMA table_info(gestures)');
+  const names = new Set(columns.map(column => column.name));
+  if (!names.has('code')) {
+    await database.execAsync('ALTER TABLE gestures ADD COLUMN code TEXT;');
+  }
+  if (!names.has('kind')) {
+    await database.execAsync("ALTER TABLE gestures ADD COLUMN kind TEXT NOT NULL DEFAULT 'sequence';");
+  }
+  if (!names.has('symbol')) {
+    await database.execAsync('ALTER TABLE gestures ADD COLUMN symbol TEXT;');
+  }
+}
+
 async function ensureDraftVisitColumns(database) {
   const table = await database.getFirstAsync(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'draft_visits'"
@@ -635,6 +649,7 @@ async function initializeDatabase() {
   await ensureVisitsSchema(database);
   await ensureDraftVisitColumns(database);
   await ensureVisitColumns(database);
+  await ensureGesturesSchema(database);
   await ensureMedicationIntervalColumns(database);
   await ensureMedicineHistoryBackfill(database);
   if (__DEV__) {
@@ -1408,15 +1423,41 @@ export async function getGestures() {
   return rows;
 }
 
-export async function addGesture(word, data) {
-  console.log('[db] addGesture word=', word, 'dataBytes=', data?.length);
+export async function addGesture(word, data, code = null, kind = 'sequence', symbol = null) {
+  console.log('[db] addGesture word=', word, 'code=', code, 'kind=', kind, 'symbol=', symbol, 'dataBytes=', data?.length);
   const database = await getDb();
+  await ensureGesturesSchema(database);
   const result = await database.runAsync(
-    'INSERT INTO gestures (word, data) VALUES (?, ?)',
-    [word, data]
+    'INSERT INTO gestures (word, data, code, kind, symbol) VALUES (?, ?, ?, ?, ?)',
+    [word, data, code, kind, symbol]
   );
   console.log('[db] addGesture inserted id=', result.lastInsertRowId, 'changes=', result.changes);
   return result.lastInsertRowId;
+}
+
+export async function addGlyphGesture(symbol, data) {
+  const trimmedSymbol = symbol?.trim();
+  if (!trimmedSymbol) {
+    throw new Error('Glyph symbol is required');
+  }
+  return addGesture('', data, null, 'glyph', trimmedSymbol);
+}
+
+export async function addExpansion(code, word) {
+  const trimmedCode = code?.trim();
+  const trimmedWord = word?.trim();
+  if (!trimmedCode || !trimmedWord) {
+    throw new Error('Expansion code and output are required');
+  }
+  return addGesture(trimmedWord, '{}', trimmedCode, 'expansion', null);
+}
+
+export async function addSequenceGesture(word, data, code = null) {
+  const trimmedWord = word?.trim();
+  if (!trimmedWord || !data) {
+    throw new Error('Sequence output and stroke data are required');
+  }
+  return addGesture(trimmedWord, data, code?.trim() || null, 'sequence', null);
 }
 
 export async function deleteGesture(id) {

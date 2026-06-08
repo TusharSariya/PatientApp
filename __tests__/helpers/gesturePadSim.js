@@ -23,6 +23,7 @@ export function makeRawPath({
 export const GESTURE_PAD_PRESETS = {
   horizontal: makeRawPath({ count: 24, stepX: 10, stepY: 0 }),
   vertical: makeRawPath({ count: 24, stepX: 0, stepY: 10 }),
+  diagonal: makeRawPath({ count: 24, stepX: 8, stepY: 8 }),
   multiTouch: makeRawPath({ count: 24, stepX: 10, stepY: 1, touches: 2 }),
   shortInvalid: makeRawPath({ count: 5, stepX: 8 }),
 };
@@ -84,4 +85,10 @@ export function drawPreset(pad, presetName) {
     throw new Error(`Unknown gesture preset: ${presetName}`);
   }
   drawPath(pad, points);
+}
+
+export function drawStrokes(pad, presetNames) {
+  for (const presetName of presetNames) {
+    drawPreset(pad, presetName);
+  }
 }

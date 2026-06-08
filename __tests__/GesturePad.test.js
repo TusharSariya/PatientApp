@@ -21,11 +21,13 @@ describe('GesturePad', () => {
   test('completes a single-finger horizontal gesture after layout', () => {
     const onGestureChange = jest.fn();
     const onGestureComplete = jest.fn();
+    const onStrokeComplete = jest.fn();
     const onDrawingChange = jest.fn();
     render(
       <GesturePad
         onGestureChange={onGestureChange}
         onGestureComplete={onGestureComplete}
+        onStrokeComplete={onStrokeComplete}
         onDrawingChange={onDrawingChange}
       />
     );
@@ -37,6 +39,19 @@ describe('GesturePad', () => {
     expect(onGestureChange.mock.calls.some((call) => call[0]?.kind === 'touch-path-v1')).toBe(true);
     expect(onGestureComplete).toHaveBeenCalled();
     expect(onGestureComplete.mock.calls[0][0]?.kind).toBe('touch-path-v1');
+    expect(onStrokeComplete).toHaveBeenCalled();
+    expect(onStrokeComplete.mock.calls[0][0]?.kind).toBe('touch-path-v1');
+  });
+
+  test('emits separate onStrokeComplete calls for multiple lifts', () => {
+    const onStrokeComplete = jest.fn();
+    render(<GesturePad onStrokeComplete={onStrokeComplete} />);
+    const pad = screen.getByTestId('gesture-pad');
+    drawPreset(pad, 'horizontal');
+    drawPreset(pad, 'vertical');
+    expect(onStrokeComplete).toHaveBeenCalledTimes(2);
+    expect(onStrokeComplete.mock.calls[0][0]?.kind).toBe('touch-path-v1');
+    expect(onStrokeComplete.mock.calls[1][0]?.kind).toBe('touch-path-v1');
   });
 
   test('completes a multi-touch gesture path', () => {
