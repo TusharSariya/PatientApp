@@ -1,4 +1,9 @@
 import { applyExtractedVisit, buildDefaultSelection } from '../src/visitExtraction/applyExtractedVisit';
+import {
+  getMockVisitDictationScript,
+  MOCK_VISIT_DICTATION_SCRIPT_LIST,
+  MOCK_VISIT_DICTATION_SCRIPTS,
+} from '../src/visitExtraction/mockVisitDictationScripts';
 import { buildVisitExtractionLoadConfig } from '../src/visitExtraction/visitExtractionPrompt';
 import { parseExtractionResponse } from '../src/visitExtraction/parseExtractionResponse';
 import { validateExtractedVisit } from '../src/visitExtraction/validateExtractedVisit';
@@ -59,5 +64,22 @@ describe('visitExtraction', () => {
     expect(updates.prescribedMeds).toHaveLength(1);
     expect(updates.prescribedMeds[0].draftId).toBe(2);
     expect(updates.narrativeTranscript).toBe('Patient has cough');
+  });
+
+  test('mock visit dictation scripts export full and quick transcripts', () => {
+    expect(MOCK_VISIT_DICTATION_SCRIPT_LIST).toHaveLength(2);
+    expect(MOCK_VISIT_DICTATION_SCRIPTS.fullVisit.transcript.length).toBeGreaterThan(100);
+    expect(MOCK_VISIT_DICTATION_SCRIPTS.quickSmoke.transcript.length).toBeGreaterThan(20);
+    expect(getMockVisitDictationScript('fullVisit').id).toBe('fullVisit');
+    expect(getMockVisitDictationScript('unknown').id).toBe('fullVisit');
+  });
+
+  test('fullVisit transcript includes extraction anchors', () => {
+    const { transcript } = MOCK_VISIT_DICTATION_SCRIPTS.fullVisit;
+    expect(transcript.toLowerCase()).toContain('sore throat');
+    expect(transcript).toMatch(/one eighteen over seventy six/i);
+    expect(transcript.toLowerCase()).toContain('amoxicillin');
+    expect(transcript.toLowerCase()).toContain('paracetamol');
+    expect(transcript.toLowerCase()).toContain('patient scope');
   });
 });

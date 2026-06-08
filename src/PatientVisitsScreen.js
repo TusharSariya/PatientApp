@@ -78,6 +78,27 @@ function hasMedicineDraftContent(med) {
   );
 }
 
+export function hasVisitDraftContent(draft, today = todayIsoDate()) {
+  return Boolean(
+    (draft.visitDate ?? '').trim() !== today ||
+    (draft.complaints ?? '').trim() ||
+    (draft.diagnosis ?? '').trim() ||
+    (draft.investigations ?? '').trim() ||
+    (draft.procedures ?? '').trim() ||
+    (draft.findings ?? '').trim() ||
+    (draft.bp ?? '').trim() ||
+    (draft.weight ?? '').trim() ||
+    (draft.weightUnit ?? 'kg') !== 'kg' ||
+    (draft.notes ?? '').trim() ||
+    (draft.visitCost ?? '').trim() ||
+    (draft.paymentAmount ?? '').trim() ||
+    (draft.paymentScope ?? 'patient') !== 'patient' ||
+    (draft.narrativeTranscript ?? '').trim() ||
+    hasMedicineDraftContent(draft.draftMed) ||
+    (draft.medicines ?? []).length > 0
+  );
+}
+
 export default function PatientVisitsScreen({ route, navigation }) {
   const { patient } = route.params;
   const [visits, setVisits] = useState([]);
@@ -119,6 +140,7 @@ export default function PatientVisitsScreen({ route, navigation }) {
   const [reviewSheetVisible, setReviewSheetVisible] = useState(false);
   const [pendingExtraction, setPendingExtraction] = useState(null);
   const [gemmaModelVariant, setGemmaModelVariant] = useState('e2b');
+  const [dictationExpanded, setDictationExpanded] = useState(false);
   const skipAutosaveRef = useRef(false);
 
   const loadVisits = useCallback(async () => {
@@ -143,6 +165,13 @@ export default function PatientVisitsScreen({ route, navigation }) {
   useEffect(() => {
     loadVisits().catch(() => {});
   }, [loadVisits]);
+
+  useEffect(() => {
+    if (!narrativeSheetVisible) return;
+    getAppSettings()
+      .then((settings) => setGemmaModelVariant(settings.gemmaModelVariant ?? 'e2b'))
+      .catch(() => {});
+  }, [narrativeSheetVisible]);
 
   function resetVisitForm() {
     setVisitDate(todayIsoDate());
@@ -211,23 +240,22 @@ export default function PatientVisitsScreen({ route, navigation }) {
   }
 
   function hasDraftContent(draft) {
-    return Boolean(
-      (draft.visitDate ?? '').trim() !== todayIsoDate() ||
-      (draft.complaints ?? '').trim() ||
-      (draft.diagnosis ?? '').trim() ||
-      (draft.investigations ?? '').trim() ||
-      (draft.procedures ?? '').trim() ||
-      (draft.findings ?? '').trim() ||
-      (draft.bp ?? '').trim() ||
-      (draft.weight ?? '').trim() ||
-      draft.weightUnit !== 'kg' ||
-      (draft.notes ?? '').trim() ||
-      (draft.visitCost ?? '').trim() ||
-      (draft.paymentAmount ?? '').trim() ||
-      draft.paymentScope !== 'patient' ||
-      hasMedicineDraftContent(draft.draftMed) ||
-      (draft.medicines ?? []).length > 0
-    );
+    return hasVisitDraftContent(draft);
+  }
+
+  async function persistDraftWithTranscript(transcript) {
+    const draft = {
+      ...buildDraftPayload(),
+      narrativeTranscript: transcript,
+    };
+    try {
+      setDraftStatus('Saving draft...');
+      await saveDraftVisit(patient.id, draft);
+      setHasSavedDraft(true);
+      setDraftStatus('Dictation saved — extraction failed');
+    } catch {
+      setDraftStatus('Draft not saved');
+    }
   }
 
   function restoreDraft(draft) {
@@ -681,6 +709,24 @@ export default function PatientVisitsScreen({ route, navigation }) {
               ) : null}
             </View>
           </View>
+          {narrativeTranscript.trim() ? (
+            <View style={styles.savedDictationBox}>
+              <TouchableOpacity
+                testID="saved-dictation-toggle"
+                onPress={() => setDictationExpanded((value) => !value)}
+              >
+                <Text style={styles.savedDictationLabel}>
+                  Saved dictation ({narrativeTranscript.trim().length} chars)
+                  {dictationExpanded ? ' ▾' : ' ▸'}
+                </Text>
+              </TouchableOpacity>
+              {dictationExpanded ? (
+                <Text testID="saved-dictation-text" selectable style={styles.savedDictationText}>
+                  {narrativeTranscript}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           <Text style={styles.label}>Visit Date</Text>
           <TextInput
             style={styles.input}
@@ -879,10 +925,16 @@ export default function PatientVisitsScreen({ route, navigation }) {
       <VisitNarrativeSheet
         visible={narrativeSheetVisible}
         gemmaVariant={gemmaModelVariant}
+        navigation={navigation}
         onClose={() => setNarrativeSheetVisible(false)}
         onExtracted={(extraction) => {
           setPendingExtraction(extraction);
           setReviewSheetVisible(true);
+        }}
+        onTranscriptSaved={async (transcript) => {
+          setNarrativeTranscript(transcript);
+          setDictationExpanded(true);
+          await persistDraftWithTranscript(transcript);
         }}
       />
       <VisitExtractionReviewSheet
@@ -979,6 +1031,25 @@ const styles = StyleSheet.create({
     color: '#5f6d8a',
     fontSize: 13,
     fontWeight: '600',
+  },
+  savedDictationBox: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#dce2f7',
+    borderRadius: 10,
+    backgroundColor: '#fafbff',
+    padding: 12,
+  },
+  savedDictationLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4f6ef7',
+  },
+  savedDictationText: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#333',
   },
   discardDraftButton: {
     borderWidth: 1,

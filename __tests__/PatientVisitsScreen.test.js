@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, ScrollView } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import PatientVisitsScreen from '../src/PatientVisitsScreen';
+import PatientVisitsScreen, { hasVisitDraftContent } from '../src/PatientVisitsScreen';
 import {
   addVisit,
   clearDraftVisit,
@@ -38,7 +38,7 @@ jest.mock('../src/prescriptionPdf', () => ({
 jest.mock('../src/VisitNarrativeSheet', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return function MockVisitNarrativeSheet({ visible, onExtracted }) {
+  return function MockVisitNarrativeSheet({ visible, onExtracted, onTranscriptSaved }) {
     if (!visible) return null;
     return (
       <View testID="mock-visit-narrative">
@@ -53,6 +53,12 @@ jest.mock('../src/VisitNarrativeSheet', () => {
           }
         >
           <Text>Mock extract</Text>
+        </Pressable>
+        <Pressable
+          testID="mock-visit-narrative-save-transcript"
+          onPress={() => onTranscriptSaved?.('Saved dictation transcript')}
+        >
+          <Text>Mock save transcript</Text>
         </Pressable>
       </View>
     );
@@ -529,6 +535,29 @@ describe('PatientVisitsScreen', () => {
     await waitFor(() => {
       expect(addVisit).toHaveBeenCalledWith(9, expect.objectContaining({ weightUnit: 'lbs', weight: '160' }));
     });
+  });
+
+  test('hasVisitDraftContent treats narrative transcript as draft content', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    expect(hasVisitDraftContent({ visitDate: today, narrativeTranscript: 'Patient has fever' }, today)).toBe(true);
+    expect(hasVisitDraftContent({ visitDate: today, narrativeTranscript: '' }, today)).toBe(false);
+  });
+
+  test('failed dictation saves transcript to draft immediately', async () => {
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByTestId('dictate-visit-button')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('dictate-visit-button'));
+    await waitFor(() => expect(screen.getByTestId('mock-visit-narrative')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('mock-visit-narrative-save-transcript'));
+
+    await waitFor(() => {
+      expect(saveDraftVisit).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({ narrativeTranscript: 'Saved dictation transcript' })
+      );
+    });
+    expect(screen.getByTestId('saved-dictation-text').props.children).toBe('Saved dictation transcript');
   });
 
   test('dictate visit opens narrative flow and applies extracted complaints', async () => {
