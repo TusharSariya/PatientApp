@@ -187,6 +187,39 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith('ALTER TABLE app_settings ADD COLUMN gemma_model_downloaded INTEGER NOT NULL DEFAULT 0;');
   });
 
+  test('saveAppSettings persists expanded on-device model variant ids', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM app_settings')) {
+        return {
+          id: 1,
+          currency_code: 'INR',
+          default_input_mode: 'gestures',
+          gemma_model_variant: 'e2b',
+          gemma_model_downloaded: 0,
+        };
+      }
+      if (sql.includes('PRAGMA table_info(app_settings)')) {
+        return [
+          { name: 'currency_code' },
+          { name: 'default_input_mode' },
+          { name: 'gemma_model_variant' },
+          { name: 'gemma_model_downloaded' },
+        ];
+      }
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    const saved = await database.saveAppSettings({ gemmaModelVariant: 'gemma3n-e2b' });
+
+    expect(saved.gemmaModelVariant).toBe('gemma3n-e2b');
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('gemma_model_variant'),
+      expect.arrayContaining(['gemma3n-e2b'])
+    );
+  });
+
   test('addPatient inserts patient and uses existing family id when provided', async () => {
     const db = createMockDb();
     db.getFirstAsync.mockImplementation(async (sql, params) => {

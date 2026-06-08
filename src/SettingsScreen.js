@@ -28,7 +28,7 @@ const ROWS = [
     key: 'visitAi',
     icon: '🧠',
     title: 'Visit AI',
-    sub: 'On-device Gemma 4 visit dictation',
+    sub: 'On-device visit AI models and downloads',
     screen: 'VisitAiSettings',
   },
   {

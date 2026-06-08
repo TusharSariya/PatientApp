@@ -21,7 +21,7 @@ import {
 
 import { extractVisitFromAudio, extractVisitFromText } from './gemma/gemmaVisitExtractor';
 import { getGemmaModelState, subscribeGemmaModelManager } from './gemma/GemmaModelManager';
-import { MAX_VISIT_RECORDING_SECONDS } from './gemma/gemmaConfig';
+import { MAX_VISIT_RECORDING_SECONDS, modelSupportsNativeAudio } from './gemma/gemmaConfig';
 import { VISIT_RECORDING_OPTIONS } from './visitExtraction/visitRecordingOptions';
 
 export default function VisitNarrativeSheet({
@@ -85,7 +85,8 @@ export default function VisitNarrativeSheet({
 
   async function startRecording() {
     setError('');
-    const shouldUseFallback = !modelState.isReady;
+    const textOnlyModel = !modelSupportsNativeAudio(gemmaVariant);
+    const shouldUseFallback = !modelState.isReady || textOnlyModel;
     fallbackModeRef.current = shouldUseFallback;
     setUseFallback(shouldUseFallback);
 
@@ -169,6 +170,10 @@ export default function VisitNarrativeSheet({
           {!modelState.isReady ? (
             <Text style={styles.banner}>
               Model not loaded. You can dictate with system speech, but extraction requires Visit AI setup.
+            </Text>
+          ) : !modelSupportsNativeAudio(gemmaVariant) ? (
+            <Text style={styles.banner}>
+              This model uses system speech for dictation, then on-device text extraction.
             </Text>
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}

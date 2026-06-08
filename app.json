@@ -37,6 +37,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withGemmaIosEntitlement",
       "./plugins/withXcode26ExplicitModulesFix",
       "expo-sqlite",
       "expo-audio",
@@ -51,6 +52,7 @@
       "@sentry/react-native"
     ],
     "extra": {
+      "gemmaIosExtendedAddressing": false,
       "eas": {
         "projectId": "2d24940f-1173-474f-bd3e-60f2df068342"
       }

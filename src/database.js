@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import { DEFAULT_CURRENCY_CODE, isValidCurrencyCode } from './currency';
 import { DEFAULT_INPUT_MODE, normalizeInputMode } from './inputMode';
 import { splitPatientName } from './patientName';
+import { normalizeGemmaVariant } from './gemma/gemmaConfig';
 
 let db;
 const appSettingsListeners = new Set();
@@ -1251,7 +1252,7 @@ export async function getClinicProfile() {
 }
 
 function normalizeGemmaModelVariant(value) {
-  return value === 'e4b' ? 'e4b' : 'e2b';
+  return normalizeGemmaVariant(value);
 }
 
 export function mapAppSettingsRow(row) {

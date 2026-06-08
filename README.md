@@ -236,26 +236,38 @@ git push --no-verify
 
 Consider enabling branch protection on `main` in your GitHub repo settings so merges require the CI check to pass.
 
-### On-device visit dictation (Gemma 4)
+### On-device visit dictation
 
-PatientApp can dictation-fill a visit form using **Gemma 4** via [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) (`react-native-litert-lm`). Audio and extraction run on the phone; no visit data is sent to a cloud LLM.
+PatientApp can dictation-fill a visit form using on-device models via [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) (`react-native-litert-lm`). Extraction runs on the phone; no visit data is sent to a cloud LLM.
 
 **Requirements**
 
 - Custom dev/production build (not Expo Go)
 - Physical ARM device (Android API 26+, iOS 15+)
-- ~3 GB free storage for the model download
-- 4 GB+ RAM for Gemma 4 E2B; 6 GB+ recommended for E4B
-- iOS: paid Apple Developer account for the extended virtual addressing entitlement
+- Wi‑Fi and free storage for the model you choose (1–4 GB typical)
+- iOS models over 2 GB: paid Apple Developer account + `"extra.gemmaIosExtendedAddressing": true` in `app.json`, then `npx expo prebuild --clean` and rebuild
+
+**Model options (Settings → Visit AI)**
+
+| Model | Size | Native audio | iOS entitlement |
+|-------|------|--------------|-----------------|
+| Gemma 3n E2B | ~1.3 GB | Yes | Not required (recommended on free-team iOS) |
+| Gemma 3 1B | ~1 GB | No (system speech) | Not required; HuggingFace Gemma license |
+| Qwen 2.5 1.5B | ~1.5 GB | No (system speech) | Not required |
+| Gemma 4 E2B | ~2.6 GB | Yes | Required |
+| Phi-4 Mini | ~2 GB | No (system speech) | Required |
+| Gemma 4 E4B | ~3.7 GB | Yes | Required; 6 GB+ RAM |
 
 **Setup**
 
 1. Open **Settings → Visit AI**
-2. Choose **E2B** (default) or **E4B**
-3. Tap **Download model** and wait for the on-device cache to finish
-4. On a patient’s **Visits** screen, tap **Dictate Visit**, record the encounter, review extracted fields, then **Apply**
+2. Tap a model card (Gemma 3n E2B is the iOS-friendly default without the paid entitlement)
+3. On Wi‑Fi, tap **Download model** (or **Resume download**) and wait for cache + in-memory load
+4. On a patient’s **Visits** screen, tap **Dictate Visit**, record, review fields, then **Apply**
 
-Inference uses Gemma native audio when the model is loaded. If the model is unavailable, the app can capture a transcript with system speech, but extraction still requires the downloaded model.
+Downloads are resumable: partial files stay in app cache so interrupted transfers can continue. **Cached on disk** means the `.litertlm` file is saved; **Ready** means it is loaded into memory.
+
+Multimodal models use native audio extraction. Text-only models capture dictation with system speech, then extract from the transcript on-device.
 
 Rebuild native projects after installing dependencies:
 
