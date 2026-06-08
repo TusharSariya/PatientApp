@@ -4,4 +4,5 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.js'],
   clearMocks: true,
   collectCoverageFrom: ['src/**/*.js', '!src/**/__tests__/**'],
+  coverageReporters: ['text', 'lcov'],
 };
