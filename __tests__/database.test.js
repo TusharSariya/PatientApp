@@ -39,6 +39,25 @@ async function loadDatabaseModule({ dev = false, db } = {}) {
 }
 
 describe('database', () => {
+  test('concurrent getDb calls share one initialization', async () => {
+    const db = createMockDb();
+    let releaseOpen;
+    const openGate = new Promise((resolve) => {
+      releaseOpen = () => resolve(db);
+    });
+    const { database, SQLite } = await loadDatabaseModule({ dev: true, db });
+    SQLite.openDatabaseAsync.mockImplementation(() => openGate);
+
+    const pendingA = database.getDb();
+    const pendingB = database.getDb();
+    expect(SQLite.openDatabaseAsync).toHaveBeenCalledTimes(1);
+    releaseOpen();
+    const [first, second] = await Promise.all([pendingA, pendingB]);
+
+    expect(first).toBe(second);
+    expect(first).toBe(db);
+  });
+
   test('initializes sqlite schema once and caches db instance', async () => {
     const db = createMockDb();
     const { database, SQLite } = await loadDatabaseModule({ dev: false, db });
@@ -56,6 +75,81 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS clinic_profile'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS app_settings'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS draft_visits'));
+  });
+
+  test('seeds dev mock patients when sqlite COUNT returns a string zero', async () => {
+    const db = createMockDb();
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('COUNT(*) AS count FROM patients')) return { count: '0' };
+      if (sql.includes('COUNT(*) AS count FROM visits')) return { count: '0' };
+      if (sql.includes('FROM clinic_profile')) return { doctor_name: '' };
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('FROM patients ORDER BY id ASC LIMIT 2')) return [];
+      return { count: 0 };
+    });
+    let familyId = 1;
+    db.runAsync.mockImplementation(async (sql) => {
+      if (sql.includes('INSERT INTO families')) {
+        const id = familyId;
+        familyId += 1;
+        return { lastInsertRowId: id, changes: 1 };
+      }
+      return { lastInsertRowId: familyId, changes: 1 };
+    });
+    const { database } = await loadDatabaseModule({ dev: true, db });
+
+    await database.getDb();
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO patients'),
+      expect.arrayContaining(['Alice', 'Marie', 'Johnson'])
+    );
+  });
+
+  test('backfills missing dev mock patients after a partial seed', async () => {
+    const db = createMockDb();
+    const existingPatients = [
+      { id: 1, first_name: 'Alice', last_name: 'Johnson' },
+      { id: 2, first_name: 'Bob', last_name: 'Martinez' },
+    ];
+    db.getFirstAsync.mockImplementation(async (sql, params) => {
+      if (sql.includes('COUNT(*) AS count FROM patients')) return { count: 2 };
+      if (sql.includes('COUNT(*) AS count FROM visits')) return { count: 0 };
+      if (sql.includes('COUNT(*) AS count FROM medicines')) return { count: 3 };
+      if (sql.includes('FROM clinic_profile')) return { doctor_name: '' };
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('SELECT id FROM patients WHERE first_name = ? AND last_name = ?')) {
+        const match = existingPatients.find(
+          (p) => p.first_name === params[0] && p.last_name === params[1]
+        );
+        return match ? { id: match.id } : null;
+      }
+      if (sql.includes('FROM patients ORDER BY id ASC LIMIT 2')) {
+        return existingPatients.map((p) => ({ id: p.id, family_id: 1 }));
+      }
+      return { count: 0 };
+    });
+    let familyId = 10;
+    db.runAsync.mockImplementation(async (sql) => {
+      if (sql.includes('INSERT INTO families')) {
+        const id = familyId;
+        familyId += 1;
+        return { lastInsertRowId: id, changes: 1 };
+      }
+      return { lastInsertRowId: 3, changes: 1 };
+    });
+    const { database } = await loadDatabaseModule({ dev: true, db });
+
+    await database.getDb();
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO patients'),
+      expect.arrayContaining(['Carol', 'Anh', 'Nguyen'])
+    );
+    expect(db.runAsync).not.toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO patients'),
+      expect.arrayContaining(['Alice', 'Marie', 'Johnson'])
+    );
   });
 
   test('getAppSettings returns INR by default', async () => {

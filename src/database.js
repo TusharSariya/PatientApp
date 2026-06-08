@@ -4,7 +4,8 @@ import { DEFAULT_INPUT_MODE, normalizeInputMode } from './inputMode';
 import { splitPatientName } from './patientName';
 import { normalizeGemmaVariant } from './gemma/gemmaConfig';
 
-let db;
+let db = null;
+let dbInitPromise = null;
 const appSettingsListeners = new Set();
 
 const MOCK_PATIENTS = [
@@ -293,6 +294,11 @@ async function ensureAppSettingsSchema(database) {
 }
 
 async function ensureDraftVisitColumns(database) {
+  const table = await database.getFirstAsync(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'draft_visits'"
+  );
+  if (!table) return;
+
   const columns = await database.getAllAsync('PRAGMA table_info(draft_visits)');
   const names = new Set(columns.map((column) => column.name));
   if (!names.has('narrative_transcript')) {
@@ -400,9 +406,68 @@ async function ensureDevClinicProfileMock(database) {
   );
 }
 
+function readSqlCount(row) {
+  const value = Number(row?.count ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+async function findMockPatientId(database, firstName, lastName) {
+  const row = await database.getFirstAsync(
+    'SELECT id FROM patients WHERE first_name = ? AND last_name = ? LIMIT 1',
+    [firstName, lastName]
+  );
+  return row?.id ?? null;
+}
+
+async function countMissingDevMockPatients(database) {
+  let missing = 0;
+  for (const p of MOCK_PATIENTS) {
+    const id = await findMockPatientId(database, p.firstName, p.lastName);
+    if (!id) missing += 1;
+  }
+  return missing;
+}
+
+async function seedDevMockPatients(database) {
+  let aliceId = await findMockPatientId(database, 'Alice', 'Johnson');
+
+  for (const p of MOCK_PATIENTS) {
+    const existingId = await findMockPatientId(database, p.firstName, p.lastName);
+    if (existingId) {
+      if (p.firstName === 'Alice' && p.lastName === 'Johnson') aliceId = existingId;
+      continue;
+    }
+    const familyInsert = await database.runAsync('INSERT INTO families DEFAULT VALUES');
+    const result = await database.runAsync(
+      'INSERT INTO patients (first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [p.firstName, p.middleName, p.lastName, p.dob ?? '', familyInsert.lastInsertRowId, p.phone, p.address]
+    );
+    if (p.firstName === 'Alice' && p.lastName === 'Johnson') aliceId = result.lastInsertRowId;
+  }
+
+  if (!aliceId) return;
+
+  const medRow = await database.getFirstAsync(
+    'SELECT COUNT(*) AS count FROM medicines WHERE patient_id = ?',
+    [aliceId]
+  );
+  if (readSqlCount(medRow) > 0) return;
+
+  for (const m of ALICE_MEDICINES) {
+    const medInsert = await database.runAsync(
+      'INSERT INTO medicines (patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [aliceId, m.name, m.dosage, m.frequency, m.intervalDays ?? 1, m.duration, m.route, m.instructions]
+    );
+    await database.runAsync(
+      'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [aliceId, medInsert.lastInsertRowId, m.name, m.dosage, m.frequency, m.intervalDays ?? 1, m.duration, m.route, m.instructions, 'added']
+    );
+  }
+}
+
 async function ensureDevFamilyMockData(database) {
   const visitsRow = await database.getFirstAsync('SELECT COUNT(*) AS count FROM visits');
-  if ((visitsRow?.count ?? 0) > 0) return;
+  if (readSqlCount(visitsRow) > 0) return;
 
   const patients = await database.getAllAsync('SELECT id, family_id FROM patients ORDER BY id ASC LIMIT 2');
   if (patients.length < 2) return;
@@ -463,12 +528,9 @@ async function ensureDevFamilyMockData(database) {
   );
 }
 
-export async function getDb() {
-  if (!db) {
-    console.log('[db] getDb: initializing, __DEV__=', __DEV__);
-    db = await SQLite.openDatabaseAsync('patients.db');
-    console.log('[db] opened');
-    await db.execAsync(`
+async function initializeDatabase() {
+  const database = await SQLite.openDatabaseAsync('patients.db');
+  await database.execAsync(`
       CREATE TABLE IF NOT EXISTS families (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -563,52 +625,48 @@ export async function getDb() {
       INSERT OR IGNORE INTO clinic_profile (id) VALUES (1);
     `);
 
-    await ensureAppSettingsSchema(db);
-    await ensureDraftVisitColumns(db);
-    await ensurePatientsSchema(db);
-    await ensurePatientsDobColumn(db);
-    await ensurePatientsNotesColumn(db);
-    await ensureFamiliesSchema(db);
-    await ensurePatientsFamilyColumn(db);
-    await ensurePatientFamilyAssignments(db);
-    await ensureVisitsSchema(db);
-    await ensureVisitColumns(db);
-    await ensureMedicationIntervalColumns(db);
-    await ensureMedicineHistoryBackfill(db);
-    if (__DEV__) {
-      await ensureDevClinicProfileMock(db);
-      await ensureDevFamilyMockData(db);
-    }
-
-    if (__DEV__) {
-      const row = await db.getFirstAsync('SELECT COUNT(*) AS count FROM patients');
-      const patientCount = row?.count ?? 0;
-
-      if (patientCount === 0) {
-        let aliceId;
-        for (const p of MOCK_PATIENTS) {
-          const familyInsert = await db.runAsync('INSERT INTO families DEFAULT VALUES');
-          const result = await db.runAsync(
-            'INSERT INTO patients (first_name, middle_name, last_name, dob, family_id, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [p.firstName, p.middleName, p.lastName, p.dob ?? '', familyInsert.lastInsertRowId, p.phone, p.address]
-          );
-          if (p.firstName === 'Alice' && p.lastName === 'Johnson') aliceId = result.lastInsertRowId;
-        }
-        for (const m of ALICE_MEDICINES) {
-          const medInsert = await db.runAsync(
-            'INSERT INTO medicines (patient_id, name, dosage, frequency, interval_days, duration, route, instructions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [aliceId, m.name, m.dosage, m.frequency, m.intervalDays ?? 1, m.duration, m.route, m.instructions]
-          );
-          await db.runAsync(
-            'INSERT INTO medicine_history (patient_id, medicine_id, name, dosage, frequency, interval_days, duration, route, instructions, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [aliceId, medInsert.lastInsertRowId, m.name, m.dosage, m.frequency, m.intervalDays ?? 1, m.duration, m.route, m.instructions, 'added']
-          );
-        }
-      }
-      await ensureDevFamilyMockData(db);
-    }
+  await ensureAppSettingsSchema(database);
+  await ensurePatientsSchema(database);
+  await ensurePatientsDobColumn(database);
+  await ensurePatientsNotesColumn(database);
+  await ensureFamiliesSchema(database);
+  await ensurePatientsFamilyColumn(database);
+  await ensurePatientFamilyAssignments(database);
+  await ensureVisitsSchema(database);
+  await ensureDraftVisitColumns(database);
+  await ensureVisitColumns(database);
+  await ensureMedicationIntervalColumns(database);
+  await ensureMedicineHistoryBackfill(database);
+  if (__DEV__) {
+    await ensureDevClinicProfileMock(database);
+    await ensureDevFamilyMockData(database);
   }
-  return db;
+
+  if (__DEV__) {
+    const missingMockPatients = await countMissingDevMockPatients(database);
+    if (missingMockPatients > 0) {
+      await seedDevMockPatients(database);
+    }
+    await ensureDevFamilyMockData(database);
+  }
+
+  return database;
+}
+
+export async function getDb() {
+  if (db) return db;
+  if (!dbInitPromise) {
+    dbInitPromise = initializeDatabase()
+      .then((database) => {
+        db = database;
+        return database;
+      })
+      .catch((error) => {
+        dbInitPromise = null;
+        throw error;
+      });
+  }
+  return dbInitPromise;
 }
 
 function normalizeFamilyIdInput(familyId) {
