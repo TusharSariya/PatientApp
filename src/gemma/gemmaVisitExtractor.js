@@ -6,14 +6,14 @@ import {
 } from '../visitExtraction/visitExtractionPrompt';
 import { parseExtractionResponse } from '../visitExtraction/parseExtractionResponse';
 import { validateExtractedVisit } from '../visitExtraction/validateExtractedVisit';
-import { getGemmaLlm, loadGemmaModel } from './GemmaModelManager';
+import { getGemmaLlm, getGemmaModelState, loadGemmaModel } from './GemmaModelManager';
 
 async function ensureReadyLlm(variant) {
-  let llm = getGemmaLlm();
-  if (!llm?.isReady?.()) {
-    llm = await loadGemmaModel(variant);
+  const { loadedVariant, isReady } = getGemmaModelState();
+  if (isReady && loadedVariant === variant) {
+    return getGemmaLlm();
   }
-  return llm;
+  return loadGemmaModel(variant);
 }
 
 function finalizeExtraction(responseText, transcript = '') {

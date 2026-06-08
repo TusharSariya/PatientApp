@@ -129,8 +129,8 @@ export default function VisitNarrativeSheet({
         if (!transcript) {
           throw new Error('No speech was captured.');
         }
-        if (!modelState.isReady) {
-          throw new Error('Download the on-device model in Settings → Visit AI before extracting.');
+        if (!modelState.isReady || modelState.loadedVariant !== gemmaVariant) {
+          throw new Error('Load the selected on-device model in Settings → Visit AI before extracting.');
         }
         const extraction = await extractVisitFromText(transcript, { variant: gemmaVariant });
         onExtracted?.(extraction);
@@ -167,9 +167,9 @@ export default function VisitNarrativeSheet({
           <Text style={styles.subtitle}>
             Speak through the visit. Extraction runs entirely on this device.
           </Text>
-          {!modelState.isReady ? (
+          {!modelState.isReady || modelState.loadedVariant !== gemmaVariant ? (
             <Text style={styles.banner}>
-              Model not loaded. You can dictate with system speech, but extraction requires Visit AI setup.
+              Model not loaded for this visit. You can dictate with system speech, but extraction requires the selected model in Visit AI settings.
             </Text>
           ) : !modelSupportsNativeAudio(gemmaVariant) ? (
             <Text style={styles.banner}>

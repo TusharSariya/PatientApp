@@ -1,23 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
 import { getAppSettings, saveAppSettings } from './database';
 import {
+  filterVisibleModels,
+  getDeviceMemoryProfile,
+  isVariantVisible,
+  pickDefaultSupportedVariant,
+} from './gemma/deviceModelCompatibility';
+import {
   cancelGemmaDownload,
   deleteCachedGemmaModel,
+  downloadGemmaModel,
   getDeviceReadiness,
   getGemmaCacheStatus,
   getGemmaLlm,
   getGemmaModelState,
-  loadGemmaModel,
+  loadCachedGemmaModel,
   subscribeGemmaModelManager,
   unloadGemmaModel,
 } from './gemma/GemmaModelManager';
@@ -26,26 +31,21 @@ import {
   isGemmaIosExtendedAddressingEnabled,
   MODEL_CATALOG_ORDER,
 } from './gemma/gemmaConfig';
-import OnDeviceModelCard, { getModelCardStatus } from './gemma/OnDeviceModelCard';
+import OnDeviceModelCard from './gemma/OnDeviceModelCard';
 import { flatSection, screenColors, screenContent } from './screenLayout';
 
-function getPrimaryActionLabel(modelState, cacheStatus) {
-  if (modelState.isLoading) return null;
-  if (modelState.isReady) return 'Reload model';
-  if (cacheStatus.isPartial || (modelState.phase === 'error' && cacheStatus.exists)) {
-    return 'Resume download';
-  }
-  if (cacheStatus.isComplete) return 'Load model';
-  return 'Download model';
-}
+const showDevWarnings = __DEV__;
 
 export default function VisitAiSettingsScreen() {
   const [settings, setSettings] = useState({ gemmaModelVariant: 'e2b' });
   const [modelState, setModelState] = useState(getGemmaModelState);
+  const [deviceProfile, setDeviceProfile] = useState(null);
   const entitlementEnabled = isGemmaIosExtendedAddressingEnabled();
 
   const selectedId = settings.gemmaModelVariant;
   const selectedModel = getOnDeviceModel(selectedId);
+  const loadedId = modelState.loadedVariant;
+  const loadedModel = loadedId ? getOnDeviceModel(loadedId) : null;
 
   const cacheByModel = useMemo(() => {
     const map = {};
@@ -53,9 +53,20 @@ export default function VisitAiSettingsScreen() {
       map[model.id] = getGemmaCacheStatus(model.id);
     }
     return map;
-  }, [selectedId, modelState.phase, modelState.cachedOnDisk]);
+  }, [selectedId, modelState.phase, modelState.operation, modelState.loadedVariant]);
 
-  const cacheStatus = cacheByModel[selectedId] ?? getGemmaCacheStatus(selectedId);
+  const visibleModels = useMemo(() => {
+    if (!deviceProfile) {
+      return MODEL_CATALOG_ORDER.map((model) => ({
+        model,
+        compatibility: null,
+        devOnly: false,
+      }));
+    }
+    return filterVisibleModels(MODEL_CATALOG_ORDER, deviceProfile, cacheByModel, {
+      devMode: showDevWarnings,
+    });
+  }, [deviceProfile, cacheByModel]);
 
   useEffect(() => subscribeGemmaModelManager(setModelState), []);
 
@@ -63,50 +74,91 @@ export default function VisitAiSettingsScreen() {
     getAppSettings().then(setSettings).catch(() => {});
   }, []);
 
-  const readiness = getDeviceReadiness(getGemmaLlm()?.getMemoryUsage?.(), selectedId);
-  const primaryLabel = useMemo(
-    () => getPrimaryActionLabel(modelState, cacheStatus),
-    [modelState, cacheStatus]
+  useEffect(() => {
+    let cancelled = false;
+    getDeviceMemoryProfile(getGemmaLlm()?.getMemoryUsage?.())
+      .then((profile) => {
+        if (!cancelled) setDeviceProfile(profile);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [modelState.loadedVariant, modelState.isReady]);
+
+  useEffect(() => {
+    if (!deviceProfile) return;
+    const visible = isVariantVisible(
+      selectedId,
+      MODEL_CATALOG_ORDER,
+      deviceProfile,
+      cacheByModel,
+      { devMode: showDevWarnings },
+    );
+    if (visible) return;
+    const fallback = pickDefaultSupportedVariant(
+      MODEL_CATALOG_ORDER,
+      deviceProfile,
+      cacheByModel,
+      { devMode: showDevWarnings },
+    );
+    setSettings((current) => ({ ...current, gemmaModelVariant: fallback }));
+    saveAppSettings({ gemmaModelVariant: fallback }).catch(() => {});
+  }, [deviceProfile, selectedId, cacheByModel]);
+
+  const readiness = getDeviceReadiness(
+    getGemmaLlm()?.getMemoryUsage?.(),
+    selectedId,
+    deviceProfile,
   );
-  const statusLabel = useMemo(
-    () => getModelCardStatus(selectedModel, cacheStatus, modelState),
-    [selectedModel, cacheStatus, modelState]
-  );
+  const selectionMismatch = loadedId && loadedId !== selectedId && modelState.isReady;
 
   async function handleVariantChange(variant) {
     const next = { ...settings, gemmaModelVariant: variant };
     setSettings(next);
     await saveAppSettings({ gemmaModelVariant: variant });
-    if (modelState.isReady && modelState.variant !== variant) {
-      await unloadGemmaModel();
-    }
   }
 
-  async function handleDownload() {
+  async function handleDownload(variant) {
     try {
-      await loadGemmaModel(selectedId);
-      await saveAppSettings({ gemmaModelDownloaded: true });
+      await downloadGemmaModel(variant);
     } catch (error) {
       Alert.alert('Model download failed', error?.message ?? 'Could not download the on-device model.');
     }
+  }
+
+  async function handleLoad(variant) {
+    try {
+      await loadCachedGemmaModel(variant);
+    } catch (error) {
+      Alert.alert('Model load failed', error?.message ?? 'Could not load the on-device model.');
+    }
+  }
+
+  async function handleUnload() {
+    await unloadGemmaModel();
   }
 
   function handleCancel() {
     cancelGemmaDownload();
   }
 
-  async function handleDelete() {
+  async function handleDelete(variant) {
+    const model = getOnDeviceModel(variant);
     Alert.alert(
       'Delete cached model?',
-      `This frees about ${selectedModel.sizeLabel} of storage. You can download again later over Wi‑Fi.`,
+      `This frees about ${model.sizeLabel} of storage. You can download again later over Wi‑Fi.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteCachedGemmaModel(selectedId);
-            await saveAppSettings({ gemmaModelDownloaded: false });
+            try {
+              await deleteCachedGemmaModel(variant);
+            } catch (error) {
+              Alert.alert('Delete failed', error?.message ?? 'Could not delete the cached model.');
+            }
           },
         },
       ]
@@ -120,8 +172,13 @@ export default function VisitAiSettingsScreen() {
           Visit dictation runs on your phone. Choose a model below — audio and extracted fields stay on-device.
         </Text>
         <Text style={styles.note}>
-          Use Wi‑Fi for downloads. Partial files resume automatically. Only one model is loaded in memory at a time.
+          Download models over Wi‑Fi. You can cache several models and load one at a time. Visit dictation uses the selected model.
         </Text>
+        {selectionMismatch ? (
+          <Text style={styles.warning} testID="selection-mismatch-banner">
+            {`${loadedModel.label} is loaded; ${selectedModel.label} is selected for visits. Load the selected model before dictation.`}
+          </Text>
+        ) : null}
         {readiness.multimodalWarning ? (
           <Text style={styles.warning}>{readiness.multimodalWarning}</Text>
         ) : null}
@@ -132,7 +189,22 @@ export default function VisitAiSettingsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>On-device models</Text>
-        {MODEL_CATALOG_ORDER.map((model) => (
+        {deviceProfile?.ramKnown ? (
+          <Text style={styles.note} testID="device-ram-banner">
+            {`Your device reports ${deviceProfile.totalRamGb ?? deviceProfile.effectiveRamGb} GB RAM. Models that need more are hidden.`}
+          </Text>
+        ) : null}
+        {showDevWarnings && readiness.iosBlocked && !entitlementEnabled ? (
+          <Text style={styles.warning} testID="dev-entitlement-banner">
+            {`${selectedModel.label} needs the iOS extended virtual addressing entitlement (paid Apple Developer Program). Try Gemma 3n E2B instead, or enable extra.gemmaIosExtendedAddressing in app.json and rebuild.`}
+          </Text>
+        ) : null}
+        {!readiness.meetsMinRam && readiness.availableRamGb && deviceProfile?.ramKnown ? (
+          <Text style={styles.warning} testID="ram-warning-banner">
+            {`Available RAM (${readiness.availableRamGb} GB) may be below ${selectedModel.label}'s ${selectedModel.minRamLabel} recommendation.`}
+          </Text>
+        ) : null}
+        {visibleModels.map(({ model, compatibility, devOnly }) => (
           <OnDeviceModelCard
             key={model.id}
             model={model}
@@ -140,69 +212,18 @@ export default function VisitAiSettingsScreen() {
             cacheStatus={cacheByModel[model.id]}
             modelState={modelState}
             entitlementEnabled={entitlementEnabled}
+            compatibility={compatibility}
+            showDevWarnings={showDevWarnings}
+            devOnly={devOnly}
             onPress={() => handleVariantChange(model.id)}
+            onDownload={handleDownload}
+            onLoad={handleLoad}
+            onUnload={handleUnload}
+            onCancel={handleCancel}
+            onDelete={handleDelete}
             testID={`gemma-variant-${model.id}`}
           />
         ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{selectedModel.label}</Text>
-        <Text style={styles.status} testID="gemma-status-label">{statusLabel}</Text>
-        {modelState.phase === 'error' && modelState.variant === selectedId && modelState.error ? (
-          <Text style={styles.error} testID="gemma-error-text">{modelState.error}</Text>
-        ) : null}
-        {modelState.phase === 'error' && cacheStatus.isPartial ? (
-          <Text style={styles.note}>Download paused — check your connection and tap Resume download.</Text>
-        ) : null}
-        {readiness.iosRequiresEntitlement && !entitlementEnabled ? (
-          <Text style={styles.warning}>
-            This model needs the iOS extended virtual addressing entitlement (paid Apple Developer Program).
-            Try Gemma 3n E2B instead, or enable extra.gemmaIosExtendedAddressing in app.json and rebuild.
-          </Text>
-        ) : null}
-        {!readiness.meetsMinRam && readiness.availableRamGb ? (
-          <Text style={styles.warning}>
-            {`Available RAM (${readiness.availableRamGb} GB) may be below this model's ${selectedModel.minRamLabel} recommendation.`}
-          </Text>
-        ) : null}
-        {primaryLabel ? (
-          <TouchableOpacity
-            testID="download-gemma-model"
-            style={styles.primaryButton}
-            onPress={handleDownload}
-            disabled={modelState.isLoading}
-          >
-            {modelState.isLoading && modelState.variant === selectedId ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
-            )}
-          </TouchableOpacity>
-        ) : modelState.variant === selectedId ? (
-          <TouchableOpacity
-            testID="download-gemma-model"
-            style={styles.primaryButton}
-            disabled
-          >
-            <ActivityIndicator color="#fff" />
-          </TouchableOpacity>
-        ) : null}
-        {modelState.phase === 'downloading' && modelState.variant === selectedId ? (
-          <TouchableOpacity testID="cancel-gemma-download" style={styles.secondaryButton} onPress={handleCancel}>
-            <Text style={styles.secondaryButtonText}>Cancel download</Text>
-          </TouchableOpacity>
-        ) : null}
-        {modelState.phase === 'error' && modelState.variant === selectedId && cacheStatus.isPartial ? (
-          <TouchableOpacity testID="retry-gemma-download" style={styles.secondaryButton} onPress={handleDownload}>
-            <Text style={styles.secondaryButtonText}>Retry download</Text>
-          </TouchableOpacity>
-        ) : null}
-        {(cacheStatus.isComplete || (modelState.isReady && modelState.variant === selectedId)) ? (
-          <TouchableOpacity testID="delete-gemma-model" style={styles.secondaryButton} onPress={handleDelete}>
-            <Text style={styles.secondaryButtonText}>Delete cached model</Text>
-          </TouchableOpacity>
-        ) : null}
       </View>
     </ScrollView>
   );
@@ -240,38 +261,5 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-  },
-  status: {
-    fontSize: 15,
-    color: '#1a1a2e',
-    marginBottom: 12,
-  },
-  error: {
-    color: '#b42318',
-    marginBottom: 12,
-    fontSize: 13,
-  },
-  primaryButton: {
-    backgroundColor: '#4f6ef7',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: '#dce2f7',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  secondaryButtonText: {
-    color: '#4f6ef7',
-    fontWeight: '700',
   },
 });

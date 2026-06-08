@@ -26,10 +26,11 @@ import {
   ensureGemmaCacheDirectory,
   getGemmaCacheFileStatus,
 } from './gemmaResumableDownload';
+import { assessModelCompatibility } from './deviceModelCompatibility';
 import { buildVisitExtractionLoadConfig } from '../visitExtraction/visitExtractionPrompt';
 
 let llmInstance = null;
-let currentVariant = getDefaultGemmaVariant();
+let loadedVariant = null;
 let downloadAbortController = null;
 let lastNotifiedDownloadProgress = -1;
 
@@ -44,15 +45,58 @@ const state = {
   maxAttempts: 4,
   cachedOnDisk: false,
   error: null,
-  variant: 'e2b',
-  multimodalWarning: null,
+  loadedVariant: null,
+  variant: null,
+  operation: null,
+  multimodalWarning: checkMultimodalSupport() ?? null,
   backendWarning: null,
 };
 const listeners = new Set();
 
+function syncDerivedState() {
+  const op = state.operation;
+  if (op?.type === 'download') {
+    state.phase = op.error ? 'error' : 'downloading';
+    state.isLoading = true;
+    state.downloadProgress = op.progress ?? 0;
+    state.attempt = op.attempt ?? 0;
+    state.maxAttempts = op.maxAttempts ?? 4;
+    state.error = op.error ?? null;
+  } else if (op?.type === 'load') {
+    state.phase = op.error ? 'error' : 'loading';
+    state.isLoading = true;
+    state.downloadProgress = 1;
+    state.error = op.error ?? null;
+  } else if (state.isReady && state.loadedVariant) {
+    state.phase = 'ready';
+    state.isLoading = false;
+    state.error = null;
+  } else {
+    state.phase = 'idle';
+    state.isLoading = false;
+    if (!op) state.error = null;
+  }
+  state.loadedVariant = loadedVariant;
+  state.variant = loadedVariant;
+  state.cachedOnDisk = loadedVariant
+    ? getGemmaCacheStatus(loadedVariant).isComplete
+    : false;
+}
+
 function notify() {
-  const snapshot = { ...state };
+  syncDerivedState();
+  const snapshot = { ...state, operation: state.operation ? { ...state.operation } : null };
   listeners.forEach((listener) => listener(snapshot));
+}
+
+function setOperation(operation) {
+  state.operation = operation;
+  notify();
+}
+
+function clearOperation() {
+  state.operation = null;
+  notify();
 }
 
 function notifyDownloadProgress(progress) {
@@ -62,55 +106,35 @@ function notifyDownloadProgress(progress) {
     && lastNotifiedDownloadProgress >= 0
     && clamped - lastNotifiedDownloadProgress < MIN_DOWNLOAD_PROGRESS_NOTIFY_DELTA
   ) {
-    state.downloadProgress = clamped;
+    if (state.operation?.type === 'download') {
+      state.operation.progress = clamped;
+    }
     return;
   }
   lastNotifiedDownloadProgress = clamped;
-  state.downloadProgress = clamped;
-  state.phase = 'downloading';
-  notify();
+  if (state.operation?.type === 'download') {
+    state.operation.progress = clamped;
+    notify();
+  }
 }
 
 export function subscribeGemmaModelManager(listener) {
   listeners.add(listener);
-  listener({ ...state });
+  syncDerivedState();
+  listener({ ...state, operation: state.operation ? { ...state.operation } : null });
   return () => listeners.delete(listener);
 }
 
 export function getGemmaModelState() {
-  return { ...state };
+  syncDerivedState();
+  return { ...state, operation: state.operation ? { ...state.operation } : null };
 }
 
 export function getGemmaLlm() {
   return llmInstance;
 }
 
-function resetState(partial = {}) {
-  if ('downloadProgress' in partial) {
-    lastNotifiedDownloadProgress = partial.downloadProgress;
-  } else {
-    lastNotifiedDownloadProgress = -1;
-  }
-  const next = {
-    phase: 'idle',
-    isReady: false,
-    isLoading: false,
-    downloadProgress: 0,
-    attempt: 0,
-    maxAttempts: 4,
-    cachedOnDisk: false,
-    error: null,
-    variant: currentVariant,
-    multimodalWarning: checkMultimodalSupport() ?? null,
-    backendWarning: checkBackendSupport(getDefaultGemmaBackend(currentVariant)) ?? null,
-    ...partial,
-  };
-  if (next.isReady) next.phase = 'ready';
-  Object.assign(state, next);
-  notify();
-}
-
-export function getGemmaCacheStatus(variant = currentVariant) {
+export function getGemmaCacheStatus(variant = loadedVariant ?? getDefaultGemmaVariant()) {
   const normalizedVariant = normalizeGemmaVariant(variant);
   const files = getGemmaCacheFiles(normalizedVariant);
   return getGemmaCacheFileStatus({
@@ -119,23 +143,22 @@ export function getGemmaCacheStatus(variant = currentVariant) {
   });
 }
 
-function refreshCachedOnDisk(variant = currentVariant) {
-  state.cachedOnDisk = getGemmaCacheStatus(variant).isComplete;
+function assertNoConflictingOperation(variant, allowedType) {
+  const op = state.operation;
+  if (!op) return;
+  if (op.variant === variant && op.type === allowedType) return;
+  throw new Error('Another model operation is already in progress.');
 }
 
 export function cancelGemmaDownload() {
+  if (state.operation?.type !== 'download') return;
   downloadAbortController?.abort();
   downloadAbortController = null;
-  resetState({
-    phase: 'idle',
-    variant: currentVariant,
-    cachedOnDisk: getGemmaCacheStatus(currentVariant).isComplete,
-  });
+  lastNotifiedDownloadProgress = -1;
+  clearOperation();
 }
 
 export async function unloadGemmaModel() {
-  downloadAbortController?.abort();
-  downloadAbortController = null;
   if (llmInstance) {
     try {
       llmInstance.close();
@@ -144,8 +167,9 @@ export async function unloadGemmaModel() {
     }
   }
   llmInstance = null;
-  const cachedOnDisk = getGemmaCacheStatus(currentVariant).isComplete;
-  resetState({ variant: currentVariant, cachedOnDisk, phase: cachedOnDisk ? 'idle' : 'idle' });
+  loadedVariant = null;
+  state.isReady = false;
+  clearOperation();
 }
 
 async function downloadGemmaModelFile(variant, onProgress) {
@@ -167,9 +191,11 @@ async function downloadGemmaModelFile(variant, onProgress) {
     });
   }, {
     onAttempt: (attempt, maxAttempts) => {
-      state.attempt = attempt;
-      state.maxAttempts = maxAttempts;
-      notify();
+      if (state.operation?.type === 'download') {
+        state.operation.attempt = attempt;
+        state.operation.maxAttempts = maxAttempts;
+        notify();
+      }
     },
     signal: {
       get aborted() {
@@ -179,53 +205,93 @@ async function downloadGemmaModelFile(variant, onProgress) {
   });
 }
 
-export async function loadGemmaModel(variant = getDefaultGemmaVariant()) {
+export async function downloadGemmaModel(variant = getDefaultGemmaVariant()) {
   const normalizedVariant = normalizeGemmaVariant(variant);
   const model = getOnDeviceModel(normalizedVariant);
-  currentVariant = normalizedVariant;
+  const cacheStatus = getGemmaCacheStatus(normalizedVariant);
 
-  if (llmInstance?.isReady?.()) {
-    if (state.isReady && state.variant === normalizedVariant) {
-      return llmInstance;
-    }
-    await unloadGemmaModel();
+  if (cacheStatus.isComplete) {
+    return getGemmaCacheFiles(normalizedVariant).finalFile.uri;
   }
 
-  resetState({
-    phase: 'downloading',
-    isLoading: true,
+  assertNoConflictingOperation(normalizedVariant, 'download');
+
+  lastNotifiedDownloadProgress = -1;
+  setOperation({
+    type: 'download',
     variant: normalizedVariant,
-    error: null,
-    downloadProgress: 0,
+    progress: cacheStatus.isPartial && cacheStatus.expectedBytes
+      ? cacheStatus.bytes / cacheStatus.expectedBytes
+      : 0,
     attempt: 0,
-    cachedOnDisk: getGemmaCacheStatus(normalizedVariant).isComplete,
+    maxAttempts: 4,
+    error: null,
   });
 
   try {
-    const backend = getDefaultGemmaBackend(normalizedVariant);
-    const cacheStatus = getGemmaCacheStatus(normalizedVariant);
-    let localUri = cacheStatus.isComplete
-      ? getGemmaCacheFiles(normalizedVariant).finalFile.uri
-      : null;
+    const localUri = await downloadGemmaModelFile(normalizedVariant, notifyDownloadProgress);
+    downloadAbortController = null;
+    lastNotifiedDownloadProgress = -1;
+    clearOperation();
+    return localUri;
+  } catch (error) {
+    downloadAbortController = null;
+    lastNotifiedDownloadProgress = -1;
+    const friendlyError = humanizeGemmaLoadError(error, {
+      variantLabel: model.label,
+      platform: Platform.OS,
+      iosEntitlementEnabled: isGemmaIosExtendedAddressingEnabled(),
+      iosRequiresEntitlement: model.iosRequiresEntitlement,
+    });
+    setOperation({
+      type: 'download',
+      variant: normalizedVariant,
+      progress: state.operation?.progress ?? 0,
+      attempt: state.operation?.attempt ?? 0,
+      maxAttempts: state.operation?.maxAttempts ?? 4,
+      error: friendlyError,
+    });
+    throw new Error(friendlyError);
+  }
+}
 
-    if (!localUri) {
-      localUri = await downloadGemmaModelFile(normalizedVariant, notifyDownloadProgress);
-    } else {
-      state.downloadProgress = 1;
-      notify();
+export async function loadCachedGemmaModel(variant = getDefaultGemmaVariant()) {
+  const normalizedVariant = normalizeGemmaVariant(variant);
+  const model = getOnDeviceModel(normalizedVariant);
+  const cacheStatus = getGemmaCacheStatus(normalizedVariant);
+
+  if (!cacheStatus.isComplete) {
+    throw new Error('Model is not downloaded yet. Download it first.');
+  }
+
+  if (llmInstance?.isReady?.() && loadedVariant === normalizedVariant) {
+    state.isReady = true;
+    notify();
+    return llmInstance;
+  }
+
+  assertNoConflictingOperation(normalizedVariant, 'load');
+
+  setOperation({
+    type: 'load',
+    variant: normalizedVariant,
+    error: null,
+  });
+
+  try {
+    if (llmInstance) {
+      try {
+        llmInstance.close();
+      } catch {
+        // ignore cleanup errors
+      }
+      llmInstance = null;
+      loadedVariant = null;
+      state.isReady = false;
     }
 
-    resetState({
-      phase: 'loading',
-      isLoading: true,
-      variant: normalizedVariant,
-      downloadProgress: 1,
-      attempt: state.attempt,
-      maxAttempts: state.maxAttempts,
-      cachedOnDisk: true,
-    });
-
-    // Defer native LLM init until after download — avoids holding native memory during multi-GB transfer.
+    const backend = getDefaultGemmaBackend(normalizedVariant);
+    const localUri = getGemmaCacheFiles(normalizedVariant).finalFile.uri;
     const llm = createLLM({ enableMemoryTracking: true });
     const modelPath = toNativeFilesystemPath(localUri);
     const loadConfig = buildVisitExtractionLoadConfig({
@@ -236,40 +302,59 @@ export async function loadGemmaModel(variant = getDefaultGemmaVariant()) {
     await llm.loadModel(modelPath, loadConfig);
 
     llmInstance = llm;
-    downloadAbortController = null;
-    resetState({
-      phase: 'ready',
-      isReady: true,
-      isLoading: false,
-      variant: normalizedVariant,
-      downloadProgress: 1,
-      cachedOnDisk: true,
-    });
+    loadedVariant = normalizedVariant;
+    state.isReady = true;
+    clearOperation();
     return llmInstance;
   } catch (error) {
     llmInstance = null;
-    downloadAbortController = null;
-    refreshCachedOnDisk(normalizedVariant);
+    loadedVariant = null;
+    state.isReady = false;
     const friendlyError = humanizeGemmaLoadError(error, {
       variantLabel: model.label,
       platform: Platform.OS,
       iosEntitlementEnabled: isGemmaIosExtendedAddressingEnabled(),
       iosRequiresEntitlement: model.iosRequiresEntitlement,
     });
-    resetState({
-      phase: 'error',
-      isLoading: false,
-      error: friendlyError,
+    setOperation({
+      type: 'load',
       variant: normalizedVariant,
-      cachedOnDisk: state.cachedOnDisk,
+      error: friendlyError,
     });
     throw new Error(friendlyError);
   }
 }
 
-export async function deleteCachedGemmaModel(variant = currentVariant) {
-  await unloadGemmaModel();
+export async function loadGemmaModel(variant = getDefaultGemmaVariant()) {
   const normalizedVariant = normalizeGemmaVariant(variant);
+
+  if (llmInstance?.isReady?.() && loadedVariant === normalizedVariant) {
+    state.isReady = true;
+    notify();
+    return llmInstance;
+  }
+
+  if (!getGemmaCacheStatus(normalizedVariant).isComplete) {
+    await downloadGemmaModel(normalizedVariant);
+  }
+  return loadCachedGemmaModel(normalizedVariant);
+}
+
+export async function deleteCachedGemmaModel(variant) {
+  const normalizedVariant = normalizeGemmaVariant(variant);
+
+  if (state.operation?.variant === normalizedVariant) {
+    if (state.operation.type === 'download') {
+      cancelGemmaDownload();
+    } else {
+      throw new Error('Cannot delete while the model is loading.');
+    }
+  }
+
+  if (loadedVariant === normalizedVariant) {
+    await unloadGemmaModel();
+  }
+
   const files = getGemmaCacheFiles(normalizedVariant);
   deleteDownloadArtifacts(files);
 
@@ -279,22 +364,35 @@ export async function deleteCachedGemmaModel(variant = currentVariant) {
   } catch {
     // Model may not exist in native cache.
   }
-  resetState({ variant: normalizedVariant, cachedOnDisk: false, phase: 'idle' });
+  notify();
 }
 
-export function getDeviceReadiness(memoryUsage, variant = currentVariant) {
+export function getDeviceReadiness(
+  memoryUsage,
+  variant = loadedVariant ?? getDefaultGemmaVariant(),
+  deviceProfile = null,
+) {
   const model = getOnDeviceModel(variant);
-  const available = memoryUsage?.availableMemoryBytes ?? 0;
-  const lowMemory = memoryUsage?.isLowMemory ?? false;
+  const profile = deviceProfile ?? {
+    availableMemoryBytes: memoryUsage?.availableMemoryBytes ?? null,
+    totalMemoryBytes: null,
+    maxHeapBytes: null,
+    isLowMemory: memoryUsage?.isLowMemory ?? false,
+  };
+  const compatibility = assessModelCompatibility(model, profile);
   const iosRequiresEntitlement = Platform.OS === 'ios' && model.iosRequiresEntitlement;
   return {
     variant: normalizeGemmaVariant(variant),
-    lowMemory,
-    availableRamGb: available ? (available / (1024 ** 3)).toFixed(1) : null,
-    meetsMinRam: !available || available >= model.minRamBytes,
+    lowMemory: profile.isLowMemory ?? memoryUsage?.isLowMemory ?? false,
+    availableRamGb: compatibility.deviceRamGb,
+    meetsMinRam: compatibility.meetsMinRam,
     iosRequiresEntitlement,
     iosNeedsEntitlement: iosRequiresEntitlement,
-    multimodalWarning: state.multimodalWarning,
-    backendWarning: checkBackendSupport(getDefaultGemmaBackend(variant)) ?? null,
+    iosBlocked: compatibility.iosBlocked,
+    supported: compatibility.supported,
+    ramKnown: compatibility.ramKnown,
+    incompatibilityReasons: compatibility.reasons,
+    multimodalWarning: compatibility.multimodalWarning ?? state.multimodalWarning,
+    backendWarning: compatibility.backendWarning,
   };
 }
