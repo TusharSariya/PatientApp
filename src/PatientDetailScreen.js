@@ -122,6 +122,7 @@ const Field = React.forwardRef(({
     />
   </View>
 ));
+Field.displayName = 'Field';
 
 export default function PatientDetailScreen({ route, navigation }) {
   const { patient } = route.params;

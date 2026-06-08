@@ -10,8 +10,13 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "validate": "npm test",
-    "prepare": "husky"
+    "validate": "npm run check",
+    "prepare": "husky",
+    "lint": "expo lint",
+    "doctor": "npx expo-doctor",
+    "audit": "npm audit --audit-level=high",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "check": "npm test && npm run doctor && npm run lint"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.15.9",
@@ -20,7 +25,9 @@
     "@sentry/react-native": "~7.2.0",
     "expo": "~54.0.35",
     "expo-application": "~7.0.8",
+    "expo-asset": "~12.0.13",
     "expo-audio": "~1.1.1",
+    "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
     "expo-file-system": "~19.0.23",
@@ -40,9 +47,21 @@
   "private": true,
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~10.0.0",
     "husky": "^9.1.7",
     "jest": "~29.7.0",
     "jest-expo": "~54.0.17",
-    "react-test-renderer": "^19.1.0"
+    "lint-staged": "^17.0.7",
+    "react-test-renderer": "^19.1.0",
+    "typescript": "~5.9.2"
+  },
+  "lint-staged": {
+    "src/**/*.js": [
+      "eslint --fix"
+    ],
+    "__tests__/**/*.js": [
+      "eslint --fix"
+    ]
   }
 }

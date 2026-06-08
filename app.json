@@ -22,7 +22,6 @@
     },
     "android": {
       "package": "com.patientapp.patients",
-      "minSdkVersion": 26,
       "versionCode": 16,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -49,7 +48,16 @@
           "speechRecognitionPermission": "Allow PatientApp to recognize your speech for dictation and visit narratives."
         }
       ],
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
     ],
     "extra": {
       "gemmaIosExtendedAddressing": false,

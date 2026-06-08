@@ -224,17 +224,53 @@ You can replace the file path with any test file in `__tests__/`.
 
 ### Git hooks and CI
 
-A **pre-push** hook (via [Husky](https://typicode.github.io/husky/)) runs `npm test` before every `git push`. Hooks are installed automatically when you run `npm install`.
+Hooks are installed automatically when you run `npm install` ([Husky](https://typicode.github.io/husky/)).
 
-GitHub Actions runs the same test suite on every push to `main` and on all pull requests (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+| Hook | Command | What it runs |
+|------|---------|--------------|
+| **pre-commit** | `npx lint-staged` | ESLint with auto-fix on staged `src/**` and `__tests__/**` |
+| **pre-push** | `npm run check` | Full Jest suite, `expo-doctor`, and `npm run lint` |
 
-To bypass the local hook in an emergency:
+**Local scripts**
+
+```bash
+npm test              # Jest (312 tests)
+npm run test:ci       # CI mode + coverage (lcov)
+npm run test:coverage # Local HTML coverage report
+npm run lint          # ESLint (expo lint)
+npm run doctor        # expo-doctor (SDK + config checks)
+npm run audit         # npm audit (high severity+)
+npm run check         # test + doctor + lint (same as pre-push)
+```
+
+**GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs in parallel on every push to `main` and on pull requests:
+
+- `test` — `npm run test:ci` (uploads `coverage/lcov.info` artifact)
+- `expo-doctor` — dependency and config validation
+- `lint` — ESLint
+- `audit` — `npm audit` (informational; does not block merges)
+
+Re-run CI without pushing:
+
+```bash
+gh workflow run CI
+gh run watch
+```
+
+**EAS preview builds** ([`.github/workflows/eas-preview.yml`](.github/workflows/eas-preview.yml)):
+
+- Manual: GitHub → Actions → **EAS Preview Build** → Run workflow (pick platform)
+- Automatic: push a version tag (`v*`) builds Android preview APK
+
+Requires repo secret `EXPO_TOKEN` ([Expo access token](https://expo.dev/accounts/[account]/settings/access-tokens)).
+
+To bypass local hooks in an emergency:
 
 ```bash
 git push --no-verify
 ```
 
-Consider enabling branch protection on `main` in your GitHub repo settings so merges require the CI check to pass.
+Consider enabling branch protection on `main` so merges require `test`, `expo-doctor`, and `lint` to pass.
 
 ### On-device visit dictation
 
