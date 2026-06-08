@@ -1,8 +1,26 @@
 import { applyExtractedVisit, buildDefaultSelection } from '../src/visitExtraction/applyExtractedVisit';
+import { buildVisitExtractionLoadConfig } from '../src/visitExtraction/visitExtractionPrompt';
 import { parseExtractionResponse } from '../src/visitExtraction/parseExtractionResponse';
 import { validateExtractedVisit } from '../src/visitExtraction/validateExtractedVisit';
 
 describe('visitExtraction', () => {
+  test('buildVisitExtractionLoadConfig omits tools on Android', () => {
+    const android = buildVisitExtractionLoadConfig({
+      backend: 'cpu',
+      multimodal: true,
+      platform: 'android',
+    });
+    expect(android.tools).toBeUndefined();
+    expect(android.systemPrompt).toContain('JSON object');
+
+    const ios = buildVisitExtractionLoadConfig({
+      backend: 'gpu',
+      multimodal: true,
+      platform: 'ios',
+    });
+    expect(ios.tools).toHaveLength(1);
+  });
+
   test('parseExtractionResponse reads JSON tool payload', () => {
     const result = parseExtractionResponse(
       JSON.stringify({

@@ -1,6 +1,8 @@
+import { Platform } from 'react-native';
+
 import {
-  VISIT_EXTRACTION_AUDIO_PROMPT,
   buildTextExtractionPrompt,
+  getVisitExtractionAudioPrompt,
 } from '../visitExtraction/visitExtractionPrompt';
 import { parseExtractionResponse } from '../visitExtraction/parseExtractionResponse';
 import { validateExtractedVisit } from '../visitExtraction/validateExtractedVisit';
@@ -27,13 +29,16 @@ function finalizeExtraction(responseText, transcript = '') {
 export async function extractVisitFromAudio(audioPath, { variant = 'e2b' } = {}) {
   const llm = await ensureReadyLlm(variant);
   llm.resetConversation();
-  const response = await llm.sendMessageWithAudio(VISIT_EXTRACTION_AUDIO_PROMPT, audioPath);
+  const response = await llm.sendMessageWithAudio(
+    getVisitExtractionAudioPrompt(Platform.OS),
+    audioPath,
+  );
   return finalizeExtraction(response);
 }
 
 export async function extractVisitFromText(transcript, { variant = 'e2b' } = {}) {
   const llm = await ensureReadyLlm(variant);
   llm.resetConversation();
-  const response = await llm.sendMessage(buildTextExtractionPrompt(transcript));
+  const response = await llm.sendMessage(buildTextExtractionPrompt(transcript, Platform.OS));
   return finalizeExtraction(response, transcript);
 }

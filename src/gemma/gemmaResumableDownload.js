@@ -10,6 +10,8 @@ function logDownload(event, details = {}) {
 }
 
 const CACHE_DIR_NAME = 'gemma_models';
+/** Persist resume metadata periodically — not on every network chunk. */
+const SIDECAR_PERSIST_INTERVAL_BYTES = 5 * 1024 * 1024;
 
 function parseContentRange(header) {
   if (!header) return null;
@@ -179,6 +181,7 @@ export async function downloadGemmaModelResumable({
   stallWatcher.start((error) => stallReject(error));
   stallWatcher.touch(bytesReceived / Math.max(totalBytes ?? 1, 1));
   logDownload('stream-start', { bytesReceived, totalBytes });
+  let lastSidecarPersistBytes = bytesReceived;
 
   try {
     await Promise.race([
@@ -190,11 +193,14 @@ export async function downloadGemmaModelResumable({
             const progress = Math.min(1, bytesReceived / totalBytes);
             stallWatcher.touch(progress);
             onProgress?.(progress);
-            writeDownloadSidecar(sidecarFile, {
-              url,
-              bytesReceived,
-              totalBytes,
-            });
+            if (bytesReceived - lastSidecarPersistBytes >= SIDECAR_PERSIST_INTERVAL_BYTES) {
+              writeDownloadSidecar(sidecarFile, {
+                url,
+                bytesReceived,
+                totalBytes,
+              });
+              lastSidecarPersistBytes = bytesReceived;
+            }
           } else {
             onProgress?.(0);
           }

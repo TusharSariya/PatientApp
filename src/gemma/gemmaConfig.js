@@ -194,6 +194,15 @@ export function getGemmaCacheDirectory() {
   return new Directory(Paths.cache, GEMMA_CACHE_DIR);
 }
 
+/** Native LiteRT expects a plain filesystem path, not an expo `file://` URI. */
+export function toNativeFilesystemPath(fileUri) {
+  if (!fileUri || typeof fileUri !== 'string') return fileUri;
+  if (fileUri.startsWith('file://')) {
+    return decodeURIComponent(fileUri.replace(/^file:\/\//, ''));
+  }
+  return fileUri;
+}
+
 export function getGemmaCacheFiles(variant) {
   const fileName = getGemmaModelFileName(variant);
   const dir = getGemmaCacheDirectory();

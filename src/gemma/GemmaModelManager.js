@@ -17,6 +17,7 @@ import {
   getOnDeviceModel,
   isGemmaIosExtendedAddressingEnabled,
   normalizeGemmaVariant,
+  toNativeFilesystemPath,
 } from './gemmaConfig';
 import { retryWithBackoff } from './gemmaDownloadPolicy';
 import {
@@ -25,7 +26,7 @@ import {
   ensureGemmaCacheDirectory,
   getGemmaCacheFileStatus,
 } from './gemmaResumableDownload';
-import { getExtractVisitTools, VISIT_EXTRACTION_SYSTEM_PROMPT } from '../visitExtraction/visitExtractionPrompt';
+import { buildVisitExtractionLoadConfig } from '../visitExtraction/visitExtractionPrompt';
 
 let llmInstance = null;
 let currentVariant = getDefaultGemmaVariant();
@@ -202,7 +203,6 @@ export async function loadGemmaModel(variant = getDefaultGemmaVariant()) {
 
   try {
     const backend = getDefaultGemmaBackend(normalizedVariant);
-    const llm = createLLM({ enableMemoryTracking: true });
     const cacheStatus = getGemmaCacheStatus(normalizedVariant);
     let localUri = cacheStatus.isComplete
       ? getGemmaCacheFiles(normalizedVariant).finalFile.uri
@@ -225,17 +225,15 @@ export async function loadGemmaModel(variant = getDefaultGemmaVariant()) {
       cachedOnDisk: true,
     });
 
-    await llm.loadModel(
-      localUri,
-      {
-        backend,
-        multimodal: model.multimodal,
-        systemPrompt: VISIT_EXTRACTION_SYSTEM_PROMPT,
-        tools: getExtractVisitTools(),
-        temperature: 0.2,
-        maxTokens: 2048,
-      }
-    );
+    // Defer native LLM init until after download — avoids holding native memory during multi-GB transfer.
+    const llm = createLLM({ enableMemoryTracking: true });
+    const modelPath = toNativeFilesystemPath(localUri);
+    const loadConfig = buildVisitExtractionLoadConfig({
+      backend,
+      multimodal: model.multimodal,
+      platform: Platform.OS,
+    });
+    await llm.loadModel(modelPath, loadConfig);
 
     llmInstance = llm;
     downloadAbortController = null;

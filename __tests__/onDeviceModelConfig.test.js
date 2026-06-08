@@ -6,6 +6,7 @@ import {
   normalizeGemmaVariant,
   ON_DEVICE_MODEL_IDS,
   ON_DEVICE_MODELS,
+  toNativeFilesystemPath,
 } from '../src/gemma/gemmaConfig';
 
 describe('onDeviceModelConfig', () => {
@@ -58,5 +59,12 @@ describe('onDeviceModelConfig', () => {
     expect(ON_DEVICE_MODELS['gemma3-1b'].supportsNativeAudio).toBe(false);
     expect(ON_DEVICE_MODELS['qwen2.5-1.5b'].supportsNativeAudio).toBe(false);
     expect(ON_DEVICE_MODELS['phi4-mini'].supportsNativeAudio).toBe(false);
+  });
+
+  test('toNativeFilesystemPath strips file URI scheme for native loadModel', () => {
+    expect(toNativeFilesystemPath('file:///data/user/0/cache/model.litertlm'))
+      .toBe('/data/user/0/cache/model.litertlm');
+    expect(toNativeFilesystemPath('/data/user/0/cache/model.litertlm'))
+      .toBe('/data/user/0/cache/model.litertlm');
   });
 });
