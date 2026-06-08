@@ -54,7 +54,7 @@
     "jest-expo": "~54.0.17",
     "lint-staged": "^17.0.7",
     "react-test-renderer": "^19.1.0",
-    "typescript": "~5.9.2"
+    "typescript": "~6.0.3"
   },
   "lint-staged": {
     "src/**/*.js": [
