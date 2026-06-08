@@ -18,9 +18,6 @@
         "NSSpeechRecognitionUsageDescription": "Allow PatientApp to recognize your speech for dictation and visit narratives.",
         "NSMicrophoneUsageDescription": "Allow PatientApp to use your microphone for visit dictation."
       },
-      "entitlements": {
-        "com.apple.developer.kernel.extended-virtual-addressing": true
-      },
       "bundleIdentifier": "com.patientapp.patients"
     },
     "android": {
@@ -40,6 +37,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withXcode26ExplicitModulesFix",
       "expo-sqlite",
       "expo-audio",
       "react-native-litert-lm",
