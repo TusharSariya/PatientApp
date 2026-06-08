@@ -15,6 +15,15 @@ describe('humanizeGemmaLoadError', () => {
     expect(message).toContain('extended virtual addressing');
   });
 
+  test('explains corrupt cached model files', () => {
+    const message = humanizeGemmaLoadError(
+      new Error('INVALID_ARGUMENT: Invalid magic number or failed to read'),
+      { variantLabel: 'Gemma 4 E4B', platform: 'android' },
+    );
+    expect(message).toContain('corrupted');
+    expect(message).toContain('download again');
+  });
+
   test('falls back to original message when unrecognized', () => {
     expect(humanizeGemmaLoadError(new Error('Something else'), { platform: 'ios' }))
       .toBe('Something else');

@@ -115,12 +115,8 @@ export async function downloadGemmaModelResumable({
   ensureGemmaCacheDirectory();
 
   if (finalFile.exists && finalFile.size > 0) {
-    const complete = !expectedBytes || finalFile.size >= expectedBytes * 0.98;
-    if (complete) {
-      onProgress?.(1);
-      return finalFile.uri;
-    }
-    finalFile.delete();
+    onProgress?.(1);
+    return finalFile.uri;
   }
 
   let bytesReceived = partFile.exists ? partFile.size : 0;
@@ -128,8 +124,6 @@ export async function downloadGemmaModelResumable({
   if (sidecar?.url && sidecar.url !== url) {
     deleteDownloadArtifacts({ partFile, sidecarFile });
     bytesReceived = 0;
-  } else if (sidecar?.bytesReceived && sidecar.bytesReceived > bytesReceived) {
-    bytesReceived = sidecar.bytesReceived;
   }
 
   if (!partFile.exists) {
@@ -234,8 +228,8 @@ export function getGemmaCacheFileStatus({ finalFile, partFile, sidecarFile, expe
     return {
       exists: true,
       bytes: finalFile.size,
-      expectedBytes,
-      isComplete: !expectedBytes || finalFile.size >= expectedBytes * 0.98,
+      expectedBytes: expectedBytes ?? finalFile.size,
+      isComplete: true,
       isPartial: false,
     };
   }

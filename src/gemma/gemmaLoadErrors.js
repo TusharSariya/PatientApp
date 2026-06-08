@@ -40,6 +40,13 @@ export function humanizeGemmaLoadError(error, {
     ].join(' ');
   }
 
+  if (lower.includes('invalid magic number') || lower.includes('failed to read')) {
+    return [
+      `The cached ${variantLabel ?? 'model'} file is corrupted or incomplete.`,
+      'Delete it (or tap Download after we clear the bad cache), then download again over Wi‑Fi.',
+    ].join(' ');
+  }
+
   if (lower.includes('jetsam') || lower.includes('memory') || lower.includes('low memory')) {
     return [
       `Not enough memory to load ${variantLabel ?? 'the model'}.`,

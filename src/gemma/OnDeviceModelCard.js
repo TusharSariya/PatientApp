@@ -11,6 +11,9 @@ function isOperationOnModel(modelState, modelId, type) {
 export function getModelCardStatus(model, cacheStatus, modelState) {
   const isLoaded = modelState.loadedVariant === model.id && modelState.isReady;
   if (isOperationOnModel(modelState, model.id, 'load')) {
+    if (modelState.operation?.error) {
+      return 'Load failed';
+    }
     return 'Loading into memory…';
   }
   if (isOperationOnModel(modelState, model.id, 'download')) {
@@ -43,13 +46,24 @@ export function getModelCardActions(model, cacheStatus, modelState) {
   const isLoaded = modelState.loadedVariant === model.id && modelState.isReady;
   const isDownloading = isOperationOnModel(modelState, model.id, 'download')
     && !modelState.operation?.error;
-  const isLoading = isOperationOnModel(modelState, model.id, 'load');
+  const isLoading = isOperationOnModel(modelState, model.id, 'load')
+    && !modelState.operation?.error;
   const otherOpInFlight = Boolean(
     modelState.operation && modelState.operation.variant !== model.id
   );
 
+  const loadFailed = isOperationOnModel(modelState, model.id, 'load')
+    && modelState.operation?.error;
+
   if (isLoading) {
     return { primary: null, secondary: null, busy: true };
+  }
+  if (loadFailed) {
+    return {
+      primary: { label: 'Retry load', action: 'load', disabled: otherOpInFlight },
+      secondary: { label: 'Delete', action: 'delete', destructive: true, disabled: otherOpInFlight },
+      busy: false,
+    };
   }
   if (isDownloading) {
     return { primary: { label: 'Cancel', action: 'cancel' }, secondary: null, busy: false };
@@ -129,8 +143,10 @@ export default function OnDeviceModelCard({
   onDelete,
   testID,
 }) {
-  const isDownloading = isOperationOnModel(modelState, model.id, 'download');
-  const isLoading = isOperationOnModel(modelState, model.id, 'load');
+  const isDownloading = isOperationOnModel(modelState, model.id, 'download')
+    && !modelState.operation?.error;
+  const isLoading = isOperationOnModel(modelState, model.id, 'load')
+    && !modelState.operation?.error;
   const showProgress = isDownloading || isLoading;
   const op = modelState.operation;
   const progressValue = isLoading
@@ -168,55 +184,58 @@ export default function OnDeviceModelCard({
   }
 
   return (
-    <TouchableOpacity
-      testID={testID ?? `on-device-model-card-${model.id}`}
+    <View
       style={[
         styles.card,
         flatSelectedRow(selected),
         selected && styles.cardSelected,
         devOnly && styles.cardDevOnly,
       ]}
-      onPress={onPress}
-      activeOpacity={0.85}
     >
-      <View style={styles.header}>
-        <Text style={styles.title}>{model.label}</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{model.badge}</Text>
+      <TouchableOpacity
+        testID={testID ?? `on-device-model-card-${model.id}`}
+        onPress={onPress}
+        activeOpacity={0.85}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>{model.label}</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{model.badge}</Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.description}>{model.description}</Text>
-      <Text style={styles.meta}>
-        {model.sizeLabel} · {model.minRamLabel} RAM
-        {model.supportsNativeAudio ? ' · Native audio' : ' · System speech'}
-      </Text>
-      {model.huggingFaceLicenseRequired ? (
-        <Text style={styles.warning}>HuggingFace Gemma license required to download.</Text>
-      ) : null}
-      {needsEntitlementWarning ? (
-        <Text style={styles.warning} testID={`${model.id}-entitlement-warning`}>
-          Requires paid iOS developer entitlement to load.
+        <Text style={styles.description}>{model.description}</Text>
+        <Text style={styles.meta}>
+          {model.sizeLabel} · {model.minRamLabel} RAM
+          {model.supportsNativeAudio ? ' · Native audio' : ' · System speech'}
         </Text>
-      ) : null}
-      {showDevWarnings && devOnly && compatibility?.reasons?.length ? (
-        <Text style={styles.devOnlyReason} testID={`${model.id}-dev-only-reason`}>
-          {`Hidden in production: ${compatibility.reasons.join('; ')}`}
-        </Text>
-      ) : null}
-      <View style={styles.footer}>
-        <Text style={[styles.status, isLoaded && styles.statusReady]}>
-          {status}
-        </Text>
-        {selected ? <Text style={styles.selectedMark}>Selected for visits</Text> : null}
-      </View>
-      {opError ? (
-        <Text style={styles.errorText} testID={`${model.id}-error-text`}>{opError}</Text>
-      ) : null}
-      {showProgress ? (
-        <View style={styles.progressTrack} testID={`${model.id}-progress-track`}>
-          <View style={[styles.progressFill, { width: `${Math.round(progressValue * 100)}%` }]} />
+        {model.huggingFaceLicenseRequired ? (
+          <Text style={styles.warning}>HuggingFace Gemma license required to download.</Text>
+        ) : null}
+        {needsEntitlementWarning ? (
+          <Text style={styles.warning} testID={`${model.id}-entitlement-warning`}>
+            Requires paid iOS developer entitlement to load.
+          </Text>
+        ) : null}
+        {showDevWarnings && devOnly && compatibility?.reasons?.length ? (
+          <Text style={styles.devOnlyReason} testID={`${model.id}-dev-only-reason`}>
+            {`Hidden in production: ${compatibility.reasons.join('; ')}`}
+          </Text>
+        ) : null}
+        <View style={styles.footer}>
+          <Text style={[styles.status, isLoaded && styles.statusReady]}>
+            {status}
+          </Text>
+          {selected ? <Text style={styles.selectedMark}>Selected for visits</Text> : null}
         </View>
-      ) : null}
+        {opError ? (
+          <Text style={styles.errorText} testID={`${model.id}-error-text`}>{opError}</Text>
+        ) : null}
+        {showProgress ? (
+          <View style={styles.progressTrack} testID={`${model.id}-progress-track`}>
+            <View style={[styles.progressFill, { width: `${Math.round(progressValue * 100)}%` }]} />
+          </View>
+        ) : null}
+      </TouchableOpacity>
       <View style={styles.actionsRow}>
         {actions.busy ? (
           <ActivityIndicator color="#4f6ef7" style={styles.busyIndicator} />
@@ -235,7 +254,7 @@ export default function OnDeviceModelCard({
           </>
         )}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 

@@ -124,7 +124,7 @@ export const ON_DEVICE_MODELS = {
     url: GEMMA_4_E4B_IT,
     fileName: 'gemma-4-E4B-it.litertlm',
     sizeLabel: '~3.7 GB',
-    expectedBytes: 4_000_000_000,
+    expectedBytes: 3_660_000_000,
     minRamBytes: 6 * 1024 * 1024 * 1024,
     minRamLabel: '6 GB+',
     badge: 'Best quality',

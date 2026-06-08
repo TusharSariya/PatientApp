@@ -146,6 +146,35 @@ describe('OnDeviceModelCard', () => {
     expect(screen.getByTestId('e2b-entitlement-warning')).toBeTruthy();
   });
 
+  test('getModelCardActions offers retry after load failure', () => {
+    const actions = getModelCardActions(
+      e2b,
+      { isComplete: true, isPartial: false },
+      {
+        ...idleState,
+        operation: {
+          type: 'load',
+          variant: 'e2b',
+          error: 'Model file not found.',
+        },
+      }
+    );
+    expect(actions.primary).toEqual({ label: 'Retry load', action: 'load', disabled: false });
+    expect(actions.busy).toBe(false);
+  });
+
+  test('getModelCardStatus reports load failed when operation has error', () => {
+    const status = getModelCardStatus(
+      e2b,
+      { isComplete: true, isPartial: false },
+      {
+        ...idleState,
+        operation: { type: 'load', variant: 'e2b', error: 'Out of memory.' },
+      }
+    );
+    expect(status).toBe('Load failed');
+  });
+
   test('shows progress bar on downloading card even when another variant is loaded', () => {
     render(
       <OnDeviceModelCard

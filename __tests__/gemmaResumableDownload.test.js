@@ -135,6 +135,46 @@ describe('gemmaResumableDownload', () => {
     });
   });
 
+  test('getGemmaCacheFileStatus treats existing final file as complete even when catalog expectedBytes is high', () => {
+    const finalFile = new File('cache', 'gemma_models', 'e4b.litertlm');
+    finalFile.create({ overwrite: true });
+    finalFile.write(new Uint8Array(500));
+
+    expect(getGemmaCacheFileStatus({
+      finalFile,
+      partFile: new File('cache', 'gemma_models', 'e4b.litertlm.part'),
+      sidecarFile: new File('cache', 'gemma_models', 'e4b.litertlm.download.json'),
+      expectedBytes: 1000,
+    })).toEqual({
+      exists: true,
+      bytes: 500,
+      expectedBytes: 1000,
+      isComplete: true,
+      isPartial: false,
+    });
+  });
+
+  test('downloadGemmaModelResumable reuses existing final file without deleting it', async () => {
+    const finalFile = new File('cache', 'gemma_models', 'reuse.litertlm');
+    finalFile.create({ overwrite: true });
+    finalFile.write(new Uint8Array(500));
+    const onProgress = jest.fn();
+
+    const uri = await downloadGemmaModelResumable({
+      url: 'https://example.com/reuse.litertlm',
+      finalFile,
+      partFile: new File('cache', 'gemma_models', 'reuse.litertlm.part'),
+      sidecarFile: new File('cache', 'gemma_models', 'reuse.litertlm.download.json'),
+      expectedBytes: 1000,
+      onProgress,
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(uri).toBe(finalFile.uri);
+    expect(finalFile.exists).toBe(true);
+    expect(onProgress).toHaveBeenCalledWith(1);
+  });
+
   test('deleteDownloadArtifacts removes part, sidecar, and final files', () => {
     const finalFile = new File('cache', 'gemma_models', 'x.litertlm');
     const partFile = new File('cache', 'gemma_models', 'x.litertlm.part');

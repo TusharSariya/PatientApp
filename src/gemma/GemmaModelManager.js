@@ -33,6 +33,8 @@ let llmInstance = null;
 let loadedVariant = null;
 let downloadAbortController = null;
 let lastNotifiedDownloadProgress = -1;
+/** @type {Map<string, Promise<string>>} */
+const inFlightDownloads = new Map();
 
 const MIN_DOWNLOAD_PROGRESS_NOTIFY_DELTA = 0.005;
 
@@ -64,7 +66,7 @@ function syncDerivedState() {
     state.error = op.error ?? null;
   } else if (op?.type === 'load') {
     state.phase = op.error ? 'error' : 'loading';
-    state.isLoading = true;
+    state.isLoading = !op.error;
     state.downloadProgress = 1;
     state.error = op.error ?? null;
   } else if (state.isReady && state.loadedVariant) {
@@ -214,44 +216,58 @@ export async function downloadGemmaModel(variant = getDefaultGemmaVariant()) {
     return getGemmaCacheFiles(normalizedVariant).finalFile.uri;
   }
 
+  const existingDownload = inFlightDownloads.get(normalizedVariant);
+  if (existingDownload) {
+    return existingDownload;
+  }
+
   assertNoConflictingOperation(normalizedVariant, 'download');
 
-  lastNotifiedDownloadProgress = -1;
-  setOperation({
-    type: 'download',
-    variant: normalizedVariant,
-    progress: cacheStatus.isPartial && cacheStatus.expectedBytes
-      ? cacheStatus.bytes / cacheStatus.expectedBytes
-      : 0,
-    attempt: 0,
-    maxAttempts: 4,
-    error: null,
-  });
-
-  try {
-    const localUri = await downloadGemmaModelFile(normalizedVariant, notifyDownloadProgress);
-    downloadAbortController = null;
+  const downloadPromise = (async () => {
     lastNotifiedDownloadProgress = -1;
-    clearOperation();
-    return localUri;
-  } catch (error) {
-    downloadAbortController = null;
-    lastNotifiedDownloadProgress = -1;
-    const friendlyError = humanizeGemmaLoadError(error, {
-      variantLabel: model.label,
-      platform: Platform.OS,
-      iosEntitlementEnabled: isGemmaIosExtendedAddressingEnabled(),
-      iosRequiresEntitlement: model.iosRequiresEntitlement,
-    });
     setOperation({
       type: 'download',
       variant: normalizedVariant,
-      progress: state.operation?.progress ?? 0,
-      attempt: state.operation?.attempt ?? 0,
-      maxAttempts: state.operation?.maxAttempts ?? 4,
-      error: friendlyError,
+      progress: cacheStatus.isPartial && cacheStatus.expectedBytes
+        ? cacheStatus.bytes / cacheStatus.expectedBytes
+        : 0,
+      attempt: 0,
+      maxAttempts: 4,
+      error: null,
     });
-    throw new Error(friendlyError);
+
+    try {
+      const localUri = await downloadGemmaModelFile(normalizedVariant, notifyDownloadProgress);
+      downloadAbortController = null;
+      lastNotifiedDownloadProgress = -1;
+      clearOperation();
+      return localUri;
+    } catch (error) {
+      downloadAbortController = null;
+      lastNotifiedDownloadProgress = -1;
+      const friendlyError = humanizeGemmaLoadError(error, {
+        variantLabel: model.label,
+        platform: Platform.OS,
+        iosEntitlementEnabled: isGemmaIosExtendedAddressingEnabled(),
+        iosRequiresEntitlement: model.iosRequiresEntitlement,
+      });
+      setOperation({
+        type: 'download',
+        variant: normalizedVariant,
+        progress: state.operation?.progress ?? 0,
+        attempt: state.operation?.attempt ?? 0,
+        maxAttempts: state.operation?.maxAttempts ?? 4,
+        error: friendlyError,
+      });
+      throw new Error(friendlyError);
+    }
+  })();
+
+  inFlightDownloads.set(normalizedVariant, downloadPromise);
+  try {
+    return await downloadPromise;
+  } finally {
+    inFlightDownloads.delete(normalizedVariant);
   }
 }
 
@@ -300,6 +316,9 @@ export async function loadCachedGemmaModel(variant = getDefaultGemmaVariant()) {
       platform: Platform.OS,
     });
     await llm.loadModel(modelPath, loadConfig);
+    if (!llm.isReady?.()) {
+      throw new Error('Model loaded but did not become ready.');
+    }
 
     llmInstance = llm;
     loadedVariant = normalizedVariant;
@@ -310,12 +329,19 @@ export async function loadCachedGemmaModel(variant = getDefaultGemmaVariant()) {
     llmInstance = null;
     loadedVariant = null;
     state.isReady = false;
+    const rawMessage = String(error?.message ?? error ?? '');
+    const isCorruptCache = /invalid magic number|failed to read/i.test(rawMessage);
     const friendlyError = humanizeGemmaLoadError(error, {
       variantLabel: model.label,
       platform: Platform.OS,
       iosEntitlementEnabled: isGemmaIosExtendedAddressingEnabled(),
       iosRequiresEntitlement: model.iosRequiresEntitlement,
     });
+    if (isCorruptCache) {
+      deleteDownloadArtifacts(getGemmaCacheFiles(normalizedVariant));
+      clearOperation();
+      throw new Error(friendlyError);
+    }
     setOperation({
       type: 'load',
       variant: normalizedVariant,
