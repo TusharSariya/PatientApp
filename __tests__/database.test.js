@@ -163,6 +163,30 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith("ALTER TABLE app_settings ADD COLUMN default_input_mode TEXT NOT NULL DEFAULT 'gestures';");
   });
 
+  test('adds gemma settings columns when saving app settings on legacy tables', async () => {
+    const db = createMockDb();
+    db.getAllAsync.mockImplementation(async (sql) => {
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      if (sql.includes('PRAGMA table_info(app_settings)')) {
+        return [{ name: 'currency_code' }, { name: 'default_input_mode' }];
+      }
+      return [];
+    });
+    db.getFirstAsync.mockImplementation(async (sql) => {
+      if (sql.includes('FROM app_settings')) {
+        return { id: 1, currency_code: 'INR', default_input_mode: 'gestures' };
+      }
+      if (sql.includes('PRAGMA table_info(patients)')) return expectedPatientColumns();
+      return { count: 0 };
+    });
+    const { database } = await loadDatabaseModule({ dev: false, db });
+
+    await database.saveAppSettings({ gemmaModelDownloaded: true });
+
+    expect(db.execAsync).toHaveBeenCalledWith("ALTER TABLE app_settings ADD COLUMN gemma_model_variant TEXT NOT NULL DEFAULT 'e2b';");
+    expect(db.execAsync).toHaveBeenCalledWith('ALTER TABLE app_settings ADD COLUMN gemma_model_downloaded INTEGER NOT NULL DEFAULT 0;');
+  });
+
   test('addPatient inserts patient and uses existing family id when provided', async () => {
     const db = createMockDb();
     db.getFirstAsync.mockImplementation(async (sql, params) => {

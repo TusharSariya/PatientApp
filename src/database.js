@@ -269,13 +269,14 @@ async function ensureVisitsSchema(database) {
 }
 
 async function ensureAppSettingsSchema(database) {
+  // Bootstrap with the oldest known columns only. Newer columns are added via ALTER
+  // so upgrades from pre-input-mode databases do not fail on INSERT.
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      currency_code TEXT NOT NULL DEFAULT 'INR',
-      default_input_mode TEXT NOT NULL DEFAULT 'gestures'
+      currency_code TEXT NOT NULL DEFAULT 'INR'
     );
-    INSERT OR IGNORE INTO app_settings (id, currency_code, default_input_mode) VALUES (1, 'INR', 'gestures');
+    INSERT OR IGNORE INTO app_settings (id, currency_code) VALUES (1, 'INR');
   `);
   const columns = await database.getAllAsync('PRAGMA table_info(app_settings)');
   const names = new Set(columns.map(column => column.name));
@@ -1265,6 +1266,7 @@ export function mapAppSettingsRow(row) {
 
 export async function getAppSettings() {
   const database = await getDb();
+  await ensureAppSettingsSchema(database);
   const row = await database.getFirstAsync('SELECT * FROM app_settings WHERE id = 1');
   return mapAppSettingsRow(row);
 }
