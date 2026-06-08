@@ -99,6 +99,11 @@ fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
 trap restore_version ERR
 
 # --- Build APK ------------------------------------------------------------
+# Sentry is optional (EXPO_PUBLIC_SENTRY_DSN). Skip source-map upload unless fully configured.
+if [[ -z "${SENTRY_ORG:-}" ]]; then
+  export SENTRY_DISABLE_AUTO_UPLOAD=true
+fi
+
 if [[ "$BUILD_MODE" == "local" ]]; then
   echo "▶ Building APK locally (Gradle)..."
   touch /tmp/eas_build_marker
