@@ -46,7 +46,7 @@
   },
   "private": true,
   "devDependencies": {
-    "@testing-library/react-native": "^13.3.3",
+    "@testing-library/react-native": "^14.0.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
     "husky": "^9.1.7",
