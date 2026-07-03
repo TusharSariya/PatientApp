@@ -75,6 +75,8 @@ describe('database', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS clinic_profile'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS app_settings'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS draft_visits'));
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('follow_up_mode TEXT'));
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('follow_up_date TEXT'));
   });
 
   test('seeds dev mock patients when sqlite COUNT returns a string zero', async () => {
@@ -692,6 +694,9 @@ describe('database', () => {
           visit_cost: '150',
           payment_amount: '25',
           payment_scope: 'family',
+          follow_up_mode: 'date',
+          follow_up_days: '0',
+          follow_up_date: '2026-06-03',
           draft_med_json: '{"name":"Azithro","intervalDays":1}',
           medicines_json: '[{"draftId":1,"name":"Paracetamol"}]',
           narrative_transcript: '',
@@ -716,6 +721,9 @@ describe('database', () => {
       visitCost: '150',
       paymentAmount: '25',
       paymentScope: 'family',
+      followUpMode: 'date',
+      followUpDays: '0',
+      followUpDate: '2026-06-03',
       draftMed: { name: 'Azithro', intervalDays: 1 },
       medicines: [{ draftId: 1, name: 'Paracetamol' }],
     });
@@ -743,6 +751,9 @@ describe('database', () => {
         JSON.stringify({ name: 'Azithro', intervalDays: 1 }),
         JSON.stringify([{ draftId: 1, name: 'Paracetamol' }]),
         '',
+        'date',
+        '0',
+        '2026-06-03',
       ]
     );
     expect(draft).toEqual({
@@ -759,6 +770,9 @@ describe('database', () => {
       visitCost: '150',
       paymentAmount: '25',
       paymentScope: 'family',
+      followUpMode: 'date',
+      followUpDays: '0',
+      followUpDate: '2026-06-03',
       draftMed: { name: 'Azithro', intervalDays: 1 },
       medicines: [{ draftId: 1, name: 'Paracetamol' }],
       narrativeTranscript: '',
@@ -877,11 +891,17 @@ describe('database', () => {
       visitCost: 200,
       paymentAmount: 50,
       paymentScope: 'family',
+      followUpMode: 'days',
+      followUpDays: 14,
       medicines: [{ name: 'Ibuprofen', dosage: '400mg', intervalDays: 1 }],
     });
 
     expect(visitId).toBe(1);
     expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO visits'), expect.any(Array));
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO visits'),
+      expect.arrayContaining(['days', 14, ''])
+    );
     expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO visit_medicines'), expect.any(Array));
     expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO payments'), expect.any(Array));
   });

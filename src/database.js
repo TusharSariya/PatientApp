@@ -226,6 +226,9 @@ async function ensureVisitsSchema(database) {
       weight_unit TEXT NOT NULL DEFAULT 'kg',
       notes TEXT NOT NULL DEFAULT '',
       visit_cost REAL NOT NULL DEFAULT 0,
+      follow_up_mode TEXT NOT NULL DEFAULT 'days',
+      follow_up_days INTEGER,
+      follow_up_date TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS visit_medicines (
@@ -265,6 +268,9 @@ async function ensureVisitsSchema(database) {
       payment_scope TEXT NOT NULL DEFAULT 'patient',
       draft_med_json TEXT NOT NULL DEFAULT '{}',
       medicines_json TEXT NOT NULL DEFAULT '[]',
+      follow_up_mode TEXT NOT NULL DEFAULT 'days',
+      follow_up_days TEXT NOT NULL DEFAULT '7',
+      follow_up_date TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -318,6 +324,15 @@ async function ensureDraftVisitColumns(database) {
   if (!names.has('narrative_transcript')) {
     await database.execAsync("ALTER TABLE draft_visits ADD COLUMN narrative_transcript TEXT NOT NULL DEFAULT '';");
   }
+  if (!names.has('follow_up_mode')) {
+    await database.execAsync("ALTER TABLE draft_visits ADD COLUMN follow_up_mode TEXT NOT NULL DEFAULT 'days';");
+  }
+  if (!names.has('follow_up_days')) {
+    await database.execAsync("ALTER TABLE draft_visits ADD COLUMN follow_up_days TEXT NOT NULL DEFAULT '7';");
+  }
+  if (!names.has('follow_up_date')) {
+    await database.execAsync("ALTER TABLE draft_visits ADD COLUMN follow_up_date TEXT NOT NULL DEFAULT '';");
+  }
 }
 
 async function ensureVisitColumns(database) {
@@ -334,6 +349,9 @@ async function ensureVisitColumns(database) {
     { name: 'weight_unit', defaultValue: "'kg'" },
     { name: 'notes', defaultValue: "''" },
     { name: 'visit_cost', defaultValue: '0' },
+    { name: 'follow_up_mode', defaultValue: "'days'" },
+    { name: 'follow_up_days', defaultValue: '0' },
+    { name: 'follow_up_date', defaultValue: "''" },
   ];
   for (const column of requiredColumns) {
     if (!names.has(column.name)) {
@@ -1048,6 +1066,9 @@ export async function getDraftVisit(patientId) {
     visitCost: row.visit_cost ?? '',
     paymentAmount: row.payment_amount ?? '',
     paymentScope: row.payment_scope === 'family' ? 'family' : 'patient',
+    followUpMode: row.follow_up_mode === 'date' ? 'date' : 'days',
+    followUpDays: row.follow_up_days == null ? '7' : String(row.follow_up_days),
+    followUpDate: row.follow_up_date ?? '',
     draftMed: parseDraftJson(row.draft_med_json, {}),
     medicines: parseDraftJson(row.medicines_json, []),
     narrativeTranscript: row.narrative_transcript ?? '',
@@ -1077,8 +1098,11 @@ export async function saveDraftVisit(patientId, draft) {
         draft_med_json,
         medicines_json,
         narrative_transcript,
+        follow_up_mode,
+        follow_up_days,
+        follow_up_date,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(patient_id) DO UPDATE SET
         visit_date = excluded.visit_date,
         complaints = excluded.complaints,
@@ -1096,6 +1120,9 @@ export async function saveDraftVisit(patientId, draft) {
         draft_med_json = excluded.draft_med_json,
         medicines_json = excluded.medicines_json,
         narrative_transcript = excluded.narrative_transcript,
+        follow_up_mode = excluded.follow_up_mode,
+        follow_up_days = excluded.follow_up_days,
+        follow_up_date = excluded.follow_up_date,
         updated_at = CURRENT_TIMESTAMP
     `,
     [
@@ -1116,6 +1143,9 @@ export async function saveDraftVisit(patientId, draft) {
       JSON.stringify(draft.draftMed ?? {}),
       JSON.stringify(draft.medicines ?? []),
       draft.narrativeTranscript ?? '',
+      draft.followUpMode === 'date' ? 'date' : 'days',
+      draft.followUpDays ?? '7',
+      draft.followUpDate ?? '',
     ]
   );
 }
@@ -1139,6 +1169,27 @@ function normalizeIntervalDays(value) {
     throw new Error('Medication interval must be an integer from 1 to 30 days.');
   }
   return parsed;
+}
+
+function normalizeFollowUp({ followUpMode, followUpDays, followUpDate }) {
+  if (followUpMode === 'date') {
+    const date = `${followUpDate ?? ''}`.trim();
+    const parsed = new Date(`${date}T00:00:00`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== date
+    ) {
+      throw new Error('Next visit date must use YYYY-MM-DD format.');
+    }
+    return { mode: 'date', days: 0, date };
+  }
+
+  const days = Number(followUpDays);
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new Error('Visit interval must be an integer from 1 to 3650 days.');
+  }
+  return { mode: 'days', days, date: '' };
 }
 
 export async function addPayment(patientId, { familyId, visitId = null, amount, scope = 'patient' }) {
@@ -1170,12 +1221,16 @@ export async function addVisit(
     visitCost = 0,
     paymentAmount = 0,
     paymentScope = 'patient',
+    followUpMode = 'days',
+    followUpDays = 7,
+    followUpDate = '',
     medicines = [],
   }
 ) {
   const database = await getDb();
   const normalizedVisitCost = normalizeAmount(visitCost);
   const normalizedPaymentAmount = normalizeAmount(paymentAmount);
+  const followUp = normalizeFollowUp({ followUpMode, followUpDays, followUpDate });
   const visitInsert = await database.runAsync(
     `
       INSERT INTO visits (
@@ -1190,8 +1245,11 @@ export async function addVisit(
         weight,
         weight_unit,
         notes,
-        visit_cost
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        visit_cost,
+        follow_up_mode,
+        follow_up_days,
+        follow_up_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       patientId,
@@ -1206,6 +1264,9 @@ export async function addVisit(
       weightUnit ?? 'kg',
       notes ?? '',
       normalizedVisitCost,
+      followUp.mode,
+      followUp.days,
+      followUp.date,
     ]
   );
   const visitId = visitInsert.lastInsertRowId;

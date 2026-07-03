@@ -164,7 +164,7 @@ describe('PatientVisitsScreen', () => {
     expect(screen.queryByText('Ibuprofen')).toBeNull();
   });
 
-  test('orders new visit fields as complaints, findings, vitals, workup, diagnosis, medicines, notes, payment', async () => {
+  test('orders new visit fields as complaints, findings, vitals, workup, diagnosis, notes, medicines, payment', async () => {
     const { toJSON } = render(<PatientVisitsScreen route={{ params: { patient } }} />);
 
     await waitFor(() => {
@@ -187,9 +187,9 @@ describe('PatientVisitsScreen', () => {
     expect(weightIndex).toBeLessThan(investigationsIndex);
     expect(investigationsIndex).toBeLessThan(proceduresIndex);
     expect(proceduresIndex).toBeLessThan(diagnosisIndex);
-    expect(diagnosisIndex).toBeLessThan(medicineIndex);
-    expect(medicineIndex).toBeLessThan(notesIndex);
-    expect(notesIndex).toBeLessThan(visitCostIndex);
+    expect(diagnosisIndex).toBeLessThan(notesIndex);
+    expect(notesIndex).toBeLessThan(medicineIndex);
+    expect(medicineIndex).toBeLessThan(visitCostIndex);
     expect(screen.getByTestId('visit-balance-box')).toBeTruthy();
   });
 
@@ -448,6 +448,8 @@ describe('PatientVisitsScreen', () => {
         weight: '70',
         weight_unit: 'kg',
         notes: '',
+        follow_up_mode: 'date',
+        follow_up_date: '2026-05-15',
       },
     ]);
     getVisitMedicines.mockResolvedValue([{ id: 1, visit_id: 10, name: 'Ibuprofen', interval_days: 2 }]);
@@ -458,6 +460,7 @@ describe('PatientVisitsScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Complaints: Headache')).toBeTruthy();
       expect(screen.getByText(/Medicines: Ibuprofen/)).toBeTruthy();
+      expect(screen.getByText(/Next Visit:/)).toBeTruthy();
     });
     expect(screen.getAllByText(/Patient Balance/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Family Balance/).length).toBeGreaterThan(0);
@@ -480,9 +483,62 @@ describe('PatientVisitsScreen', () => {
           paymentScope: 'family',
           paymentAmount: '75',
           visitCost: '200',
+          followUpMode: 'days',
+          followUpDays: '7',
+          followUpDate: '',
         })
       );
     });
+  });
+
+  test('supports an exact next-visit date immediately above Save Visit', async () => {
+    const { toJSON } = render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Current medicines (1)')).toBeTruthy());
+
+    const renderedText = collectRenderedText(toJSON());
+    expect(renderedText.indexOf('Next Visit')).toBeLessThan(renderedText.indexOf('Save Visit'));
+
+    fireEvent.press(screen.getByTestId('follow-up-mode-date'));
+    fireEvent.changeText(screen.getByTestId('follow-up-date-input'), '2026-08-15');
+    fireEvent.press(screen.getByTestId('create-visit-button'));
+
+    await waitFor(() => {
+      expect(addVisit).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({
+          followUpMode: 'date',
+          followUpDays: '',
+          followUpDate: '2026-08-15',
+        })
+      );
+    });
+  });
+
+  test('rejects an invalid next-visit day interval', async () => {
+    const alertSpy = spyAlert();
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Current medicines (1)')).toBeTruthy());
+
+    fireEvent.changeText(screen.getByTestId('follow-up-days-input'), '0');
+    fireEvent.press(screen.getByTestId('create-visit-button'));
+
+    await waitFor(() => expect(getLastAlertTitle(alertSpy)).toBe('Visit interval'));
+    expect(addVisit).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  test('rejects an invalid exact next-visit date', async () => {
+    const alertSpy = spyAlert();
+    render(<PatientVisitsScreen route={{ params: { patient } }} />);
+    await waitFor(() => expect(screen.getByText('Current medicines (1)')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('follow-up-mode-date'));
+    fireEvent.changeText(screen.getByTestId('follow-up-date-input'), '2026-02-30');
+    fireEvent.press(screen.getByTestId('create-visit-button'));
+
+    await waitFor(() => expect(getLastAlertTitle(alertSpy)).toBe('Visit interval'));
+    expect(addVisit).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 
   test('shows validation when creating visit without visit date', async () => {
