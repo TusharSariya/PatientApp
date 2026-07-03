@@ -53,6 +53,13 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isValidIsoDate(value) {
+  const trimmed = `${value ?? ''}`.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+  const parsed = new Date(`${trimmed}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === trimmed;
+}
+
 function normalizeDraftMed(value) {
   return {
     name: value?.name ?? '',
@@ -93,6 +100,9 @@ export function hasVisitDraftContent(draft, today = todayIsoDate()) {
     (draft.visitCost ?? '').trim() ||
     (draft.paymentAmount ?? '').trim() ||
     (draft.paymentScope ?? 'patient') !== 'patient' ||
+    (draft.followUpMode ?? 'days') !== 'days' ||
+    `${draft.followUpDays ?? '7'}`.trim() !== '7' ||
+    (draft.followUpDate ?? '').trim() ||
     (draft.narrativeTranscript ?? '').trim() ||
     hasMedicineDraftContent(draft.draftMed) ||
     (draft.medicines ?? []).length > 0
@@ -131,6 +141,9 @@ export default function PatientVisitsScreen({ route, navigation }) {
   const [visitCost, setVisitCost] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentScope, setPaymentScope] = useState('patient');
+  const [followUpMode, setFollowUpMode] = useState('days');
+  const [followUpDays, setFollowUpDays] = useState('7');
+  const [followUpDate, setFollowUpDate] = useState('');
   const [currencyCode, setCurrencyCode] = useState('INR');
   const [draftReady, setDraftReady] = useState(false);
   const [draftStatus, setDraftStatus] = useState('');
@@ -191,6 +204,9 @@ export default function PatientVisitsScreen({ route, navigation }) {
     setVisitCost('');
     setPaymentAmount('');
     setPaymentScope('patient');
+    setFollowUpMode('days');
+    setFollowUpDays('7');
+    setFollowUpDate('');
     setNarrativeTranscript('');
   }
 
@@ -233,6 +249,9 @@ export default function PatientVisitsScreen({ route, navigation }) {
       visitCost,
       paymentAmount,
       paymentScope,
+      followUpMode,
+      followUpDays,
+      followUpDate,
       draftMed,
       medicines: prescribedMeds,
       narrativeTranscript,
@@ -272,6 +291,9 @@ export default function PatientVisitsScreen({ route, navigation }) {
     setVisitCost(draft.visitCost ?? '');
     setPaymentAmount(draft.paymentAmount ?? '');
     setPaymentScope(draft.paymentScope === 'family' ? 'family' : 'patient');
+    setFollowUpMode(draft.followUpMode === 'date' ? 'date' : 'days');
+    setFollowUpDays(`${draft.followUpDays ?? '7'}`);
+    setFollowUpDate(draft.followUpDate ?? '');
     const medicines = Array.isArray(draft.medicines) ? draft.medicines : [];
     const restoredMeds = medicines.map((med, index) => ({
       ...normalizeDraftMed(med),
@@ -361,6 +383,9 @@ export default function PatientVisitsScreen({ route, navigation }) {
     visitCost,
     paymentAmount,
     paymentScope,
+    followUpMode,
+    followUpDays,
+    followUpDate,
     narrativeTranscript,
     hasSavedDraft,
   ]);
@@ -368,6 +393,14 @@ export default function PatientVisitsScreen({ route, navigation }) {
   async function handleCreateVisit() {
     if (!visitDate.trim()) {
       Alert.alert('Required', 'Visit date is required.');
+      return;
+    }
+    if (followUpMode === 'days' && (!/^\d+$/.test(followUpDays.trim()) || Number(followUpDays) < 1 || Number(followUpDays) > 3650)) {
+      Alert.alert('Visit interval', 'Enter a whole number from 1 to 3650 days.');
+      return;
+    }
+    if (followUpMode === 'date' && !isValidIsoDate(followUpDate)) {
+      Alert.alert('Visit interval', 'Enter the next visit date as YYYY-MM-DD.');
       return;
     }
     setSaving(true);
@@ -386,6 +419,9 @@ export default function PatientVisitsScreen({ route, navigation }) {
         visitCost: visitCost.trim() || 0,
         paymentAmount: paymentAmount.trim() || 0,
         paymentScope,
+        followUpMode,
+        followUpDays: followUpMode === 'days' ? followUpDays.trim() : '',
+        followUpDate: followUpMode === 'date' ? followUpDate.trim() : '',
         familyId: patient.family_id,
         medicines: prescribedMeds.map(({ draftId: _draftId, ...med }) => med),
       });
@@ -812,8 +848,6 @@ export default function PatientVisitsScreen({ route, navigation }) {
           />
         </View>
 
-        {renderMedicineSection()}
-
         <View style={styles.formCard}>
           <Text style={[styles.label, styles.formCardFirstLabel]}>Notes</Text>
           <TextInput
@@ -824,7 +858,12 @@ export default function PatientVisitsScreen({ route, navigation }) {
             placeholderTextColor="#bbb"
             multiline
           />
-          <Text style={styles.label}>Visit Cost</Text>
+        </View>
+
+        {renderMedicineSection()}
+
+        <View style={styles.formCard}>
+          <Text style={[styles.label, styles.formCardFirstLabel]}>Visit Cost</Text>
           <TextInput
             testID="visit-cost-input"
             style={[styles.input, styles.costInput]}
@@ -871,6 +910,45 @@ export default function PatientVisitsScreen({ route, navigation }) {
               </TouchableOpacity>
             ))}
           </View>
+          <Text style={styles.label}>Next Visit</Text>
+          <View style={styles.routeRow}>
+            {[
+              { id: 'days', label: 'In days' },
+              { id: 'date', label: 'Exact date' },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.id}
+                testID={`follow-up-mode-${option.id}`}
+                style={[styles.routeChip, followUpMode === option.id && styles.routeChipActive]}
+                onPress={() => setFollowUpMode(option.id)}
+              >
+                <Text style={[styles.routeChipText, followUpMode === option.id && styles.routeChipTextActive]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {followUpMode === 'days' ? (
+            <TextInput
+              testID="follow-up-days-input"
+              style={styles.input}
+              value={followUpDays}
+              onChangeText={setFollowUpDays}
+              placeholder="Days until next visit"
+              placeholderTextColor="#bbb"
+              keyboardType="number-pad"
+            />
+          ) : (
+            <TextInput
+              testID="follow-up-date-input"
+              style={styles.input}
+              value={followUpDate}
+              onChangeText={setFollowUpDate}
+              placeholder="Next visit date (YYYY-MM-DD)"
+              placeholderTextColor="#bbb"
+              autoCapitalize="none"
+            />
+          )}
           <TouchableOpacity
             testID="create-visit-button"
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
@@ -901,6 +979,13 @@ export default function PatientVisitsScreen({ route, navigation }) {
               {visit.weight ? <Text style={styles.visitNotes}>Weight: {visit.weight} {visit.weight_unit || 'kg'}</Text> : null}
               <Text style={styles.visitNotes}>Visit Cost: {formatMoney(visit.visit_cost, currencyCode)}</Text>
               {visit.notes ? <Text style={styles.visitNotes}>{visit.notes}</Text> : null}
+              {visit.follow_up_mode === 'date' && visit.follow_up_date ? (
+                <Text style={styles.visitNotes}>Next Visit: {formatDateLabel(visit.follow_up_date)}</Text>
+              ) : Number(visit.follow_up_days) > 0 ? (
+                <Text style={styles.visitNotes}>
+                  Next Visit: in {visit.follow_up_days} {Number(visit.follow_up_days) === 1 ? 'day' : 'days'}
+                </Text>
+              ) : null}
               {(visitMedicines[visit.id] ?? []).length > 0 ? (
                 <Text style={styles.visitNotes}>
                   Medicines: {(visitMedicines[visit.id] ?? [])
